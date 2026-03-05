@@ -44,6 +44,10 @@ def get_staged_diff() -> str:
     # Remove leading/trailing whitespace for cleaner downstream usage
     return result.stdout.strip()
 
+# Fake commit message generator used for initial testing
+def generate_commit_message() -> str:
+    return "feat: update project's files"
+
 
 # Main entry point of the application
 def main() -> None:
@@ -57,6 +61,13 @@ def main() -> None:
         sys.exit(0)
     print("Staged changes detected:")
     print(diff)
+    message: str = generate_commit_message()
+    print("Proposed Commit message:")
+    print(message)
+    confirm: str = input("Commit with this message? (y/n): ").strip().lower()
+    if confirm != "y":
+        print("Commit aborted...")
+        sys.exit(0)
 
 
 # Execute the application only when the script is run directly,
