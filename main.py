@@ -46,7 +46,23 @@ def get_staged_diff() -> str:
 
 # Fake commit message generator used for initial testing
 def generate_commit_message() -> str:
-    return "feat: update project's files"
+    return "fix: create_commit function now properly handles commit messages and executes git commit command"
+
+# Based on a given commit message, commits the changes to the detected repository
+def create_commit(message: str) -> None:
+    result: subprocess.CompletedProcess = subprocess.run(
+        ["git", "commit", "-m", message],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    if result.returncode != 0:
+        print("Commit failed...")
+        print(result.stderr)
+        sys.exit(1)
+    else:
+        print("Commit created successfully!")
+        print(result.stdout)
 
 
 # Main entry point of the application
@@ -68,6 +84,7 @@ def main() -> None:
     if confirm != "y":
         print("Commit aborted...")
         sys.exit(0)
+    create_commit(message)
 
 
 # Execute the application only when the script is run directly,
