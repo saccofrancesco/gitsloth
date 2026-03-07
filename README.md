@@ -1,1 +1,1 @@
-# Git-Sloth
+# Gitsloth
