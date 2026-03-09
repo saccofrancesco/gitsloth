@@ -43,6 +43,9 @@ def get_staged_diff() -> str:
 
     return result.stdout.strip()
 
+def estimate_tokens(text: str) -> int:
+    return len(text) // 4
+
 
 def create_commit(message: str) -> None:
     """
@@ -147,6 +150,10 @@ def main() -> None:
     diff: str = get_staged_diff()
     if not diff:
         print("No staged changes found.")
+        sys.exit(0)
+
+    if estimate_tokens(diff) > 6000:
+        print("Max tokens (6k) exceeded.")
         sys.exit(0)
 
     message: str = generate_commit_message(diff)
