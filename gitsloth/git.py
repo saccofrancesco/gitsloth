@@ -1,5 +1,5 @@
+# Standard library imports
 import subprocess
-from gitsloth.exceptions import NotARepositoryError
 
 
 def is_git_repository() -> bool:
@@ -7,14 +7,15 @@ def is_git_repository() -> bool:
     Check whether the current directory is inside a Git repository.
 
     Returns:
-        True if inside a Git repository, otherwise False.
+        bool: True if inside a Git repository, otherwise False.
     """
     try:
         subprocess.run(
             ["git", "rev-parse", "--is-inside-work-tree"],
-            check=True,
+            check=True,  # Raises CalledProcessError if command fails
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            text=True,
         )
         return True
     except subprocess.CalledProcessError:
@@ -23,13 +24,16 @@ def is_git_repository() -> bool:
 
 def get_staged_diff() -> str:
     """
-    Retrieve the diff of staged changes.
+    Retrieve the staged Git diff.
+
+    This represents the changes currently added to the staging
+    area via `git add`.
 
     Returns:
-        A string containing the staged diff.
+        str: The staged diff content.
         Returns an empty string if no changes are staged.
     """
-    result = subprocess.run(
+    result: subprocess.CompletedProcess[str] = subprocess.run(
         ["git", "diff", "--cached"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -40,24 +44,33 @@ def get_staged_diff() -> str:
 
 def create_commit(message: str) -> None:
     """
-    Create a Git commit with the provided message.
+    Create a Git commit using the provided message.
 
     Args:
-        message: The commit message to use.
+        message (str):
+            The commit message to use.
 
     Raises:
-        subprocess.CalledProcessError: If the git commit command fails.
+        subprocess.CalledProcessError:
+            If the `git commit` command fails.
     """
-    result = subprocess.run(
+    result: subprocess.CompletedProcess[str] = subprocess.run(
         ["git", "commit", "-m", message],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     )
 
+    # If the commit failed, propagate the error
     if result.returncode != 0:
-        print(f"Commit failed:\n{result.stderr}")
-        raise subprocess.CalledProcessError(result.returncode, "git commit")
+        print(f"Commit failed:\n{result.stderr.strip()}")
+        raise subprocess.CalledProcessError(
+            returncode=result.returncode,
+            cmd="git commit",
+            output=result.stdout,
+            stderr=result.stderr,
+        )
 
+    # Display Git's output on success
     print("Commit created successfully!")
-    print(result.stdout)
+    print(result.stdout.strip())
