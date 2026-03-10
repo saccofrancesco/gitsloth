@@ -113,6 +113,7 @@ def main() -> None:
         n: int = args.num if args.command == "list" else 1
 
         # Display a loading spinner while generating AI suggestions
+        console.print()
         with console.status("Generating commit messages...", spinner="dots"):
             commits: list[str] = generate_commit_messages(diff, n)
 
