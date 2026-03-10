@@ -125,7 +125,7 @@ def main() -> None:
             print(message)
 
         # Ask user confirmation before creating the commit
-        confirm: bool = Confirm.ask("Commit with this message?")
+        confirm: bool = Confirm.ask("\nCommit with this message?")
 
         if not confirm:
             console.print("Commit aborted.")
