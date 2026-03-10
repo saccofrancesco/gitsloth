@@ -7,10 +7,10 @@ from halo import Halo
 import questionary
 
 # Importing project modules for git interaction, AI generation and UI
-from gitsloth.git import is_git_repository, get_staged_diff, create_commit
-from gitsloth.ai import generate_commit_messages, estimate_token_count
-from gitsloth.ui import choose_commit
-from gitsloth.exceptions import (
+from src.git import is_git_repository, get_staged_diff, create_commit
+from src.ai import generate_commit_messages, estimate_token_count
+from src.ui import choose_commit
+from src.exceptions import (
     NotARepositoryError,
     NoStagedChangesError,
     TokenLimitExceededError,
