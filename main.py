@@ -4,6 +4,19 @@ import subprocess
 import os
 import openai
 import questionary
+from questionary import Style
+
+
+# Custom style: bold cyan pointer, bright white selected text on a dark blue highlight
+SELECTOR_STYLE: Style = Style(
+    [
+        ("question", "fg:#ffffff bold"),
+        ("pointer", "fg:#00b4d8 bold"),
+        ("highlighted", "fg:#ffffff bg:#023e8a bold"),
+        ("selected", "fg:#00b4d8 bold"),
+        ("answer", "fg:#00b4d8 bold"),
+    ]
+)
 
 
 # Helper function to establish if the tool is being called inside an initted .git repo
@@ -62,11 +75,11 @@ def get_diff() -> str | None:
             The staged diff string, or None if validation failed.
     """
     if not is_git_repo():
-        click.echo("Not inside a .git repository.")
+        click.echo("\n  ✗  Not inside a .git repository.\n")
         return None
     diff: str = get_staged_diff()
     if not diff:
-        click.echo("No staged changes found.")
+        click.echo("\n  ✗  No staged changes found.\n")
         return None
     return diff
 
@@ -196,12 +209,13 @@ def create_commit(message: str) -> None:
 
     # If the commit failed, propagate the error
     if result.returncode != 0:
-        click.echo(f"Commit failed:\n{result.stderr.strip()}")
+        click.echo(f"\n  ✗  Commit failed:\n\n{result.stderr.strip()}\n")
         return
 
     # Display Git's output on success
-    click.echo("\nCommit created successfully!")
+    click.echo(f"\n  ✓  Commit created successfully!\n")
     click.echo(result.stdout.strip())
+    click.echo()
 
 
 # Main command group entry — runs default behaviour when called with no subcommand
@@ -217,14 +231,19 @@ def main() -> None:
     diff: str | None = get_diff()
     if diff is None:
         return
+
     messages: list[str] | None = generate_commit_messages(diff)
     if messages is None:
-        click.echo("OpenAI API key not set.")
+        click.echo("\n  ✗  OpenAI API key not set.\n")
         return
-    click.echo("Proposed commit message:\n")
-    click.echo(f"\t{messages[0]}\n")
-    if not click.confirm("Accept and commit with this message?"):
+
+    click.echo("\n  Proposed commit message:\n")
+    click.echo(f"    {messages[0]}\n")
+
+    if not click.confirm("  Accept and commit with this message?"):
+        click.echo()
         return
+
     create_commit(messages[0])
 
 
@@ -253,34 +272,40 @@ def list_commits(num: int) -> None:
     if diff is None:
         return
 
-    click.echo(f"Generating {num} commit message suggestions...\n")
+    click.echo(f"\n  Generating {num} commit message suggestions…\n")
 
     messages: list[str] | None = generate_commit_messages(diff, num)
     if messages is None:
-        click.echo("OpenAI API key not set.")
+        click.echo("\n  ✗  OpenAI API key not set.\n")
         return
     if not messages:
-        click.echo("No suggestions were returned. Please try again.")
+        click.echo("\n  ✗  No suggestions were returned. Please try again.\n")
         return
+
+    # Add a blank line of padding above the selector
+    click.echo()
 
     # Build the display choices for the interactive selector
     choices: list[questionary.Choice] = [
-        questionary.Choice(title=message, value=message) for message in messages
+        questionary.Choice(title=f"  {message}", value=message) for message in messages
     ]
 
     selected: str | None = questionary.select(
-        "Select a commit message:",
+        "  Select a commit message:",
         choices=choices,
+        style=SELECTOR_STYLE,
         qmark="",
     ).ask()
 
     # ask() returns None if the user pressed Ctrl-C
     if selected is None:
-        click.echo("Aborted.")
+        click.echo("\n  Aborted.\n")
         return
 
-    click.echo(f"\nSelected message:\n\n\t{selected}\n")
-    if not click.confirm("Commit with this message?"):
+    click.echo(f"\n  Selected message:\n\n    {selected}\n")
+
+    if not click.confirm("  Commit with this message?"):
+        click.echo()
         return
 
     create_commit(selected)
