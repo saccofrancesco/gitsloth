@@ -70,9 +70,11 @@ def generate_commit_message(diff: str) -> str | None:
         return
     client: openai.OpenAI = openai.OpenAI(api_key=api_key)
     prompt: str = f"""
-        You are an expert software engineer that writes precise commit messages following the Conventional Commits specification.
+        You are an expert software engineer that writes precise commit messages 
+        following the Conventional Commits specification.
 
-        Your task is to generate a properly formatted commit message based on the provided changes.
+        Your task is to generate a properly formatted commit message based on the 
+        provided changes.
 
         Follow these rules strictly:
 
