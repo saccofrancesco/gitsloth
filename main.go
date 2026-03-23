@@ -91,9 +91,9 @@ func generateCommitMessage(diff string) (string, error) {
 
 	Return ONLY the commit message.
 	`, ConventionalCommitRules, diff)
-	resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams {
+	resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams{
 		Model: "gpt-4o-mini",
-		Messages: []openai.ChatCompletionMessageParamUnion {
+		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage("You write excelent commit messages."),
 			openai.UserMessage(prompt),
 		},
