@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+
+	openai "github.com/openai/openai-go"
 )
 
 func main() {
@@ -19,10 +23,15 @@ func main() {
 	}
 	if diff == "" {
 		fmt.Println("No changes to commit")
-	} else {
-		fmt.Println("Git diff:")
-		fmt.Println(diff)
+		os.Exit(0)
 	}
+	message, err := generateCommitMessage(diff)
+	if err != nil {
+		fmt.Println("Failed to generate the commit message", err)
+		os.Exit(1)
+	}
+	fmt.Println("Proposed commit message:")
+	fmt.Println(message)
 }
 
 func isGitRepoHere() bool {
@@ -45,4 +54,56 @@ func getGitDiff() (string, error) {
 		return "", err
 	}
 	return string(output), nil
+}
+
+const ConventionalCommitRules string = `
+1. Use the Conventional Commits format:
+<type>(optional scope): <short summary>
+
+2. Allowed types:
+feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
+
+3. The summary must:
+- Be in lowercase
+- Not end with a period
+- Be concise (max 72 characters)
+- Use imperative mood (e.g., "add", "fix", not "added", "fixes")
+`
+
+func generateCommitMessage(diff string) (string, error) {
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY not set")
+	}
+	client := openai.NewClient()
+	prompt := fmt.Sprintf(`
+	You are an expert software engineer that writes precise commit messages.
+
+	Follow the Conventional Commits specification.
+
+	%s
+
+	Task:
+	Generate ONE properly formatted commit message for the following git diff.
+
+	Changes:
+	%s
+
+	Return ONLY the commit message.
+	`, ConventionalCommitRules, diff)
+	resp, err := client.Chat.Completions.New(context.Background(), openai.ChatCompletionNewParams {
+		Model: "gpt-4o-mini",
+		Messages: []openai.ChatCompletionMessageParamUnion {
+			openai.SystemMessage("You write excelent commit messages."),
+			openai.UserMessage(prompt),
+		},
+		Temperature: openai.Float(0.2),
+	})
+	if err != nil {
+		return "", err
+	}
+	message := resp.Choices[0].Message.Content
+	message = strings.ReplaceAll(message, "```", "")
+	message = strings.TrimSpace(message)
+	return message, nil
 }
