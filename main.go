@@ -1,13 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"bufio"
 
 	openai "github.com/openai/openai-go"
 )
@@ -30,9 +30,16 @@ func main() {
 	if err != nil {
 		fmt.Println("Failed to generate the commit message", err)
 		os.Exit(1)
+	} else if message == "" {
+		fmt.Println("Commit message is empty")
+		os.Exit(1)
 	}
-	fmt.Println("Proposed commit message:")
-	fmt.Println(message)
+	confirmation := askForConfirmation(message)
+	if !confirmation {
+		fmt.Println("Commit aborted")
+		os.Exit(1)
+	}
+	createCommit(message)
 }
 
 func isGitRepoHere() bool {
@@ -113,7 +120,7 @@ func askForConfirmation(message string) bool {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Proposed commit message:")
 	fmt.Println(message)
-	fmt.Println("\nAccept and commit? (y/n): ")
+	fmt.Print("Accept and commit? (y/n): ")
 	input, _ := reader.ReadString('\n')
 	input = strings.TrimSpace(strings.ToLower(input))
 	return input == "y" || input == "yes"
