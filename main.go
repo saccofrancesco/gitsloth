@@ -1,3 +1,10 @@
+// Command gcommit generates a Conventional Commit message from staged Git changes
+// using the OpenAI API, asks for user confirmation, and creates the commit.
+//
+// It requires:
+//   - Being inside a Git repository
+//   - Staged changes (git add ...)
+//   - OPENAI_API_KEY environment variable set
 package main
 
 import (
@@ -12,6 +19,9 @@ import (
 	openai "github.com/openai/openai-go"
 )
 
+// main is the entry point of the CLI tool. It validates the environment,
+// generates a commit message from the staged diff, asks for confirmation,
+// and creates the commit.
 func main() {
 	if !isGitRepoHere() {
 		fmt.Println("Not inside a Git repository (.git not found here)")
@@ -48,6 +58,8 @@ func main() {
 	}
 }
 
+// isGitRepoHere reports whether the current working directory
+// contains a .git folder, indicating it is inside a Git repository.
 func isGitRepoHere() bool {
 	var cwd string
 	var err error
@@ -61,6 +73,8 @@ func isGitRepoHere() bool {
 	return err == nil && info != nil
 }
 
+// getGitDiff returns the staged Git diff (git diff --cached).
+// It returns an error if the git command fails.
 func getGitDiff() (string, error) {
 	var cmd *exec.Cmd = exec.Command("git", "diff", "--cached")
 	var output []byte
@@ -72,6 +86,8 @@ func getGitDiff() (string, error) {
 	return string(output), nil
 }
 
+// ConventionalCommitRules defines the formatting rules used to guide
+// the language model when generating commit messages.
 const ConventionalCommitRules string = `
 1. Use the Conventional Commits format:
 <type>(optional scope): <short summary>
@@ -86,6 +102,11 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 - Use imperative mood (e.g., "add", "fix", not "added", "fixes")
 `
 
+// generateCommitMessage uses the OpenAI API to generate a Conventional Commit
+// message based on the provided Git diff.
+//
+// It requires the OPENAI_API_KEY environment variable to be set.
+// The returned message is cleaned of formatting artifacts (e.g., code fences).
 func generateCommitMessage(diff string) (string, error) {
 	var apiKey string = os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -128,6 +149,8 @@ func generateCommitMessage(diff string) (string, error) {
 	return message, nil
 }
 
+// askForConfirmation displays the proposed commit message and asks the user
+// for confirmation via standard input. It returns true if the user accepts.
 func askForConfirmation(message string) bool {
 	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
 	fmt.Println("Proposed commit message:")
