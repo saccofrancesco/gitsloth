@@ -37,7 +37,7 @@ func main() {
 	confirmation := askForConfirmation(message)
 	if !confirmation {
 		fmt.Println("Commit aborted")
-		os.Exit(1)
+		os.Exit(0)
 	}
 	createCommit(message)
 }
