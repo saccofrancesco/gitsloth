@@ -111,7 +111,7 @@ func generateCommitMessage(diff string) (string, error) {
 
 func askForConfirmation(message string) bool {
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Proposed commit message:\n")
+	fmt.Println("Proposed commit message:")
 	fmt.Println(message)
 	fmt.Println("\nAccept and commit? (y/n): ")
 	input, _ := reader.ReadString('\n')
