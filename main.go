@@ -107,3 +107,14 @@ func generateCommitMessage(diff string) (string, error) {
 	message = strings.TrimSpace(message)
 	return message, nil
 }
+
+func createCommit(message string) error {
+	cmd := exec.Command("git", "commit", "-m", message)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("commit failed: %s", string(output))
+	}
+	fmt.Println("Commit created succesfully")
+	fmt.Println(string(output))
+	return nil
+}
