@@ -15,7 +15,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/briandowns/spinner"
 	openai "github.com/openai/openai-go"
 )
 
@@ -134,6 +136,9 @@ func generateCommitMessage(diff string) (string, error) {
 	if apiKey == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
+	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
+	s.Suffix = " Generating commit message..."
+	s.Start()
 	var client openai.Client = openai.NewClient()
 	var prompt string = fmt.Sprintf(`
 	You are an expert software engineer that writes precise commit messages.
@@ -165,6 +170,7 @@ func generateCommitMessage(diff string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	s.Stop()
 	var message string = resp.Choices[0].Message.Content
 	message = strings.ReplaceAll(message, "```", "")
 	message = strings.TrimSpace(message)
