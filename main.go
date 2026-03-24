@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"bufio"
 
 	openai "github.com/openai/openai-go"
 )
@@ -106,6 +107,16 @@ func generateCommitMessage(diff string) (string, error) {
 	message = strings.ReplaceAll(message, "```", "")
 	message = strings.TrimSpace(message)
 	return message, nil
+}
+
+func askForConfirmation(message string) bool {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Println("Proposed commit message:\n")
+	fmt.Println(message)
+	fmt.Println("\nAccept and commit? (y/n): ")
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(strings.ToLower(input))
+	return input == "y" || input == "yes"
 }
 
 func createCommit(message string) error {
