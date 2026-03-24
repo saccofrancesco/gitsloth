@@ -3,13 +3,13 @@
 //
 // It requires:
 //   - Being inside a Git repository
-//   - Staged changes (git add ...)
 //   - OPENAI_API_KEY environment variable set
 package main
 
 import (
 	"bufio"
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -23,9 +23,20 @@ import (
 // generates a commit message from the staged diff, asks for confirmation,
 // and creates the commit.
 func main() {
+	var all bool
+	flag.BoolVar(&all, "all", false, "stage all changes before commiting")
+	flag.BoolVar(&all, "a", false, "stage all changes before commiting (shorthand)")
+	flag.Parse()
 	if !isGitRepoHere() {
 		fmt.Println("Not inside a Git repository (.git not found here)")
 		os.Exit(1)
+	}
+	if all {
+		fmt.Println("Staging all changes...")
+		if err := stageAllChanges(); err != nil {
+			fmt.Println("Failed to stage changes:", err)
+			os.Exit(1)
+		}
 	}
 	var diff string
 	var err error
@@ -71,6 +82,18 @@ func isGitRepoHere() bool {
 	var info os.FileInfo
 	info, err = os.Stat(gitPath)
 	return err == nil && info != nil
+}
+
+// stageAllChanges runs `git add -A`.
+func stageAllChanges() error {
+	var cmd *exec.Cmd = exec.Command("git", "add", "-A")
+	var output []byte
+	var err error
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git add failed: %s", string(output))
+	}
+	return nil
 }
 
 // getGitDiff returns the staged Git diff (git diff --cached).
