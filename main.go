@@ -32,7 +32,6 @@ func main() {
 		os.Exit(1)
 	}
 	if all {
-		fmt.Println("Staging all changes...")
 		if err := stageAllChanges(); err != nil {
 			fmt.Println("Failed to stage changes:", err)
 			os.Exit(1)
