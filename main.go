@@ -1,4 +1,4 @@
-// Command gcommit generates a Conventional Commit message from staged Git changes
+// Command gitsloth generates a Conventional Commit message from staged Git changes
 // using the OpenAI API, asks for user confirmation, and creates the commit.
 //
 // It requires:
