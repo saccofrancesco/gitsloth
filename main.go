@@ -8,9 +8,12 @@ package main
 
 import (
 	"bufio"
-	"context"
+	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +21,6 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	openai "github.com/openai/openai-go"
 )
 
 // main is the entry point of the CLI tool. It validates the environment,
@@ -139,7 +141,6 @@ func generateCommitMessage(diff string) (string, error) {
 	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
 	s.Suffix = " Generating commit message..."
 	s.Start()
-	var client openai.Client = openai.NewClient()
 	var prompt string = fmt.Sprintf(`
 	You are an expert software engineer that writes precise commit messages.
 
@@ -155,23 +156,50 @@ func generateCommitMessage(diff string) (string, error) {
 
 	Return ONLY the commit message.
 	`, ConventionalCommitRules, diff)
-	var ctx context.Context = context.Background()
-	var params openai.ChatCompletionNewParams = openai.ChatCompletionNewParams{
-		Model: "gpt-4o-mini",
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage("You write excelent commit messages."),
-			openai.UserMessage(prompt),
+	body := map[string]interface{}{
+		"model": "gpt-4o-mini",
+		"messages": []map[string]string{
+			{"role": "system", "content": "You write excellent commit messages."},
+			{"role": "user", "content": prompt},
 		},
-		Temperature: openai.Float(0.2),
+		"temperature": 0.2,
 	}
-	var resp *openai.ChatCompletion
-	var err error
-	resp, err = client.Chat.Completions.New(ctx, params)
+	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return "", err
 	}
+	req, err := http.NewRequest(
+		"POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("API error: %s", string(respBody))
+	}
+	var result struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
 	s.Stop()
-	var message string = resp.Choices[0].Message.Content
+	if len(result.Choices) == 0 {
+		return "", fmt.Errorf("no response choices returned")
+	}
+	message := result.Choices[0].Message.Content
 	message = strings.ReplaceAll(message, "```", "")
 	message = strings.TrimSpace(message)
 	return message, nil
