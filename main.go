@@ -19,8 +19,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/briandowns/spinner"
 )
 
 // main is the entry point of the CLI tool. It validates the environment,
@@ -112,6 +110,31 @@ func getGitDiff() (string, error) {
 	return string(output), nil
 }
 
+func startSpinner(message string) func() {
+	chars := []rune("⣾⣽⣻⢿⡿⣟⣯⣷")
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		i := 0
+		for {
+			select {
+			case <-stop:
+				fmt.Print("\r\033[K")
+				return
+			default:
+				fmt.Printf("\r%c %s", chars[i%len(chars)], message)
+				time.Sleep(100 * time.Millisecond)
+				i++
+			}
+		}
+	}()
+	return func() {
+		close(stop)
+		<-done
+	}
+}
+
 // ConventionalCommitRules defines the formatting rules used to guide
 // the language model when generating commit messages.
 const ConventionalCommitRules string = `
@@ -138,9 +161,7 @@ func generateCommitMessage(diff string) (string, error) {
 	if apiKey == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond)
-	s.Suffix = " Generating commit message..."
-	s.Start()
+	stop := startSpinner(" Generating commit message...")
 	var prompt string = fmt.Sprintf(`
 	You are an expert software engineer that writes precise commit messages.
 
@@ -185,6 +206,7 @@ func generateCommitMessage(diff string) (string, error) {
 		respBody, _ := io.ReadAll(resp.Body)
 		return "", fmt.Errorf("API error: %s", string(respBody))
 	}
+	stop()
 	var result struct {
 		Choices []struct {
 			Message struct {
@@ -195,7 +217,6 @@ func generateCommitMessage(diff string) (string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", err
 	}
-	s.Stop()
 	if len(result.Choices) == 0 {
 		return "", fmt.Errorf("no response choices returned")
 	}
