@@ -85,7 +85,9 @@ func isGitRepoHere() bool {
 	return err == nil && info != nil
 }
 
-// stageAllChanges runs `git add -A`.
+// stageAllChanges stages all changes in the repository by running `git add -A`.
+// It returns an error if the Git command fails, including the command output
+// for easier debugging.
 func stageAllChanges() error {
 	var cmd *exec.Cmd = exec.Command("git", "add", "-A")
 	var output []byte
@@ -110,13 +112,16 @@ func getGitDiff() (string, error) {
 	return string(output), nil
 }
 
+// startSpinner displays a terminal spinner with the provided message.
+// It runs in a separate goroutine and returns a stop function that
+// blocks until the spinner has fully stopped and the line is cleared.
 func startSpinner(message string) func() {
-	chars := []rune("⣾⣽⣻⢿⡿⣟⣯⣷")
-	stop := make(chan struct{})
-	done := make(chan struct{})
+	var chars []rune = []rune("⣾⣽⣻⢿⡿⣟⣯⣷")
+	var stop chan struct{} = make(chan struct{})
+	var done chan struct{} = make(chan struct{})
 	go func() {
 		defer close(done)
-		i := 0
+		var i int = 0
 		for {
 			select {
 			case <-stop:
@@ -151,17 +156,22 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 - Use imperative mood (e.g., "add", "fix", not "added", "fixes")
 `
 
-// generateCommitMessage uses the OpenAI API to generate a Conventional Commit
-// message based on the provided Git diff.
+// generateCommitMessage uses the OpenAI HTTP API to generate a
+// Conventional Commit message based on the provided Git diff.
 //
-// It requires the OPENAI_API_KEY environment variable to be set.
+// It starts a spinner while the request is in progress and ensures
+// the spinner is stopped before returning.
+//
+// Requirements:
+//   - OPENAI_API_KEY environment variable must be set
+//
 // The returned message is cleaned of formatting artifacts (e.g., code fences).
 func generateCommitMessage(diff string) (string, error) {
 	var apiKey string = os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
-	stop := startSpinner(" Generating commit message...")
+	var stop func() = startSpinner(" Generating commit message...")
 	var prompt string = fmt.Sprintf(`
 	You are an expert software engineer that writes precise commit messages.
 
@@ -177,7 +187,7 @@ func generateCommitMessage(diff string) (string, error) {
 
 	Return ONLY the commit message.
 	`, ConventionalCommitRules, diff)
-	body := map[string]interface{}{
+	var body map[string]interface{} = map[string]interface{}{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
 			{"role": "system", "content": "You write excellent commit messages."},
@@ -185,42 +195,55 @@ func generateCommitMessage(diff string) (string, error) {
 		},
 		"temperature": 0.2,
 	}
-	jsonBody, err := json.Marshal(body)
+	var jsonBody []byte
+	var err error
+	jsonBody, err = json.Marshal(body)
 	if err != nil {
+		stop()
 		return "", err
 	}
-	req, err := http.NewRequest(
-		"POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	var req *http.Request
+	req, err = http.NewRequest(
+		"POST",
+		"https://api.openai.com/v1/chat/completions",
+		bytes.NewBuffer(jsonBody),
+	)
 	if err != nil {
+		stop()
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	var client *http.Client = &http.Client{}
+	var resp *http.Response
+	resp, err = client.Do(req)
 	if err != nil {
+		stop()
 		return "", err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		var respBody []byte
+		respBody, _ = io.ReadAll(resp.Body)
+		stop()
 		return "", fmt.Errorf("API error: %s", string(respBody))
 	}
 	stop()
-	var result struct {
+	type chatCompletionResponse struct {
 		Choices []struct {
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
+	var result chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", err
 	}
 	if len(result.Choices) == 0 {
 		return "", fmt.Errorf("no response choices returned")
 	}
-	message := result.Choices[0].Message.Content
+	var message string = result.Choices[0].Message.Content
 	message = strings.ReplaceAll(message, "```", "")
 	message = strings.TrimSpace(message)
 	return message, nil
@@ -243,6 +266,9 @@ func askForConfirmation(message string) bool {
 	return input == "y" || input == "yes"
 }
 
+// createCommit creates a Git commit using the provided commit message.
+// It executes `git commit -m <message>` and returns an error if the
+// command fails. On success, it prints the Git output.
 func createCommit(message string) error {
 	var cmd *exec.Cmd = exec.Command("git", "commit", "-m", message)
 	var output []byte
