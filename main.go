@@ -29,29 +29,36 @@ func main() {
 	flag.BoolVar(&all, "all", false, "stage all changes before commiting")
 	flag.BoolVar(&all, "a", false, "stage all changes before commiting (shorthand)")
 	flag.Parse()
+
 	if !isGitRepoHere() {
 		fmt.Println("Not inside a Git repository (.git not found here)")
 		os.Exit(1)
 	}
+
 	if all {
 		if err := stageAllChanges(); err != nil {
 			fmt.Println("Failed to stage changes:", err)
 			os.Exit(1)
 		}
 	}
-	var diff string
+
+	// Build structured Git context instead of relying on raw diff only.
+	var ctx *GitContext
 	var err error
-	diff, err = getGitDiff()
+	ctx, err = buildGitContext()
 	if err != nil {
-		fmt.Println("Failed to get `git diff`", err)
+		fmt.Println("Failed to build git context:", err)
 		os.Exit(1)
 	}
-	if diff == "" {
+
+	// Ensure there are actual staged changes before proceeding.
+	if strings.TrimSpace(ctx.Diff) == "" {
 		fmt.Println("No changes to commit")
 		os.Exit(0)
 	}
+
 	var message string
-	message, err = generateCommitMessage(diff)
+	message, err = generateCommitMessage(*ctx)
 	if err != nil {
 		fmt.Println("Failed to generate the commit message", err)
 		os.Exit(1)
@@ -59,10 +66,12 @@ func main() {
 		fmt.Println("Commit message is empty")
 		os.Exit(1)
 	}
+
 	if !askForConfirmation(message) {
 		fmt.Println("Commit aborted")
 		os.Exit(0)
 	}
+
 	err = createCommit(message)
 	if err != nil {
 		fmt.Println(err)
@@ -99,9 +108,33 @@ func stageAllChanges() error {
 	return nil
 }
 
-// getGitDiff returns the staged Git diff (git diff --cached).
-// It returns an error if the git command fails.
-func getGitDiff() (string, error) {
+// getBranchName returns the current Git branch name.
+func getBranchName() (string, error) {
+	var cmd *exec.Cmd = exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	var output []byte
+	var err error
+	output, err = cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// getShortGitStatus returns a compact representation of staged/unstaged changes.
+func getShortGitStatus() (string, error) {
+	var cmd *exec.Cmd = exec.Command("git", "status", "--short")
+	var output []byte
+	var err error
+	output, err = cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// getTruncatedDiff returns the staged Git diff (git diff --cached),
+// truncated to avoid sending excessively large payloads to the API.
+func getTruncatedDiff(maxBytes int) (string, error) {
 	var cmd *exec.Cmd = exec.Command("git", "diff", "--cached")
 	var output []byte
 	var err error
@@ -109,7 +142,48 @@ func getGitDiff() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return string(output), nil
+
+	var diff string = string(output)
+	if len(diff) > maxBytes {
+		diff = diff[:maxBytes] + "\n... (truncated)"
+	}
+	return diff, nil
+}
+
+// GitContext contains structured information about the current Git state.
+// This improves LLM output quality compared to using only raw diffs.
+type GitContext struct {
+	Branch string
+	Status string
+	Diff   string
+}
+
+// buildGitContext gathers all relevant Git information into a single struct.
+func buildGitContext() (*GitContext, error) {
+	var branch string
+	var err error
+	branch, err = getBranchName()
+	if err != nil {
+		return nil, err
+	}
+
+	var status string
+	status, err = getShortGitStatus()
+	if err != nil {
+		return nil, err
+	}
+
+	var diff string
+	diff, err = getTruncatedDiff(8000)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GitContext{
+		Branch: branch,
+		Status: status,
+		Diff:   diff,
+	}, nil
 }
 
 // startSpinner displays a terminal spinner with the provided message.
@@ -119,6 +193,7 @@ func startSpinner(message string) func() {
 	var chars []rune = []rune("⣾⣽⣻⢿⡿⣟⣯⣷")
 	var stop chan struct{} = make(chan struct{})
 	var done chan struct{} = make(chan struct{})
+
 	go func() {
 		defer close(done)
 		var i int = 0
@@ -134,6 +209,7 @@ func startSpinner(message string) func() {
 			}
 		}
 	}()
+
 	return func() {
 		close(stop)
 		<-done
@@ -157,7 +233,7 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 `
 
 // generateCommitMessage uses the OpenAI HTTP API to generate a
-// Conventional Commit message based on the provided Git diff.
+// Conventional Commit message based on the provided Git context.
 //
 // It starts a spinner while the request is in progress and ensures
 // the spinner is stopped before returning.
@@ -166,27 +242,41 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 //   - OPENAI_API_KEY environment variable must be set
 //
 // The returned message is cleaned of formatting artifacts (e.g., code fences).
-func generateCommitMessage(diff string) (string, error) {
+func generateCommitMessage(ctx GitContext) (string, error) {
 	var apiKey string = os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
+
 	var stop func() = startSpinner(" Generating commit message...")
+
+	// Build a structured prompt using multiple signals instead of raw diff only.
 	var prompt string = fmt.Sprintf(`
-	You are an expert software engineer that writes precise commit messages.
+You are an expert software engineer that writes precise commit messages.
 
-	Follow the Conventional Commits specification.
+Follow the Conventional Commits specification.
 
-	%s
+%s
 
-	Task:
-	Generate ONE properly formatted commit message for the following git diff.
+Branch:
+%s
 
-	Changes:
-	%s
+Git status:
+%s
 
-	Return ONLY the commit message.
-	`, ConventionalCommitRules, diff)
+Diff:
+%s
+
+Task:
+Generate ONE properly formatted commit message.
+Return ONLY the commit message.
+`,
+		ConventionalCommitRules,
+		ctx.Branch,
+		ctx.Status,
+		ctx.Diff,
+	)
+
 	var body map[string]interface{} = map[string]interface{}{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
@@ -195,6 +285,7 @@ func generateCommitMessage(diff string) (string, error) {
 		},
 		"temperature": 0.2,
 	}
+
 	var jsonBody []byte
 	var err error
 	jsonBody, err = json.Marshal(body)
@@ -202,6 +293,7 @@ func generateCommitMessage(diff string) (string, error) {
 		stop()
 		return "", err
 	}
+
 	var req *http.Request
 	req, err = http.NewRequest(
 		"POST",
@@ -212,8 +304,10 @@ func generateCommitMessage(diff string) (string, error) {
 		stop()
 		return "", err
 	}
+
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
+
 	var client *http.Client = &http.Client{}
 	var resp *http.Response
 	resp, err = client.Do(req)
@@ -222,13 +316,16 @@ func generateCommitMessage(diff string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		var respBody []byte
 		respBody, _ = io.ReadAll(resp.Body)
 		stop()
 		return "", fmt.Errorf("API error: %s", string(respBody))
 	}
+
 	stop()
+
 	type chatCompletionResponse struct {
 		Choices []struct {
 			Message struct {
@@ -236,16 +333,20 @@ func generateCommitMessage(diff string) (string, error) {
 			} `json:"message"`
 		} `json:"choices"`
 	}
+
 	var result chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", err
 	}
+
 	if len(result.Choices) == 0 {
 		return "", fmt.Errorf("no response choices returned")
 	}
+
 	var message string = result.Choices[0].Message.Content
 	message = strings.ReplaceAll(message, "```", "")
 	message = strings.TrimSpace(message)
+
 	return message, nil
 }
 
@@ -256,12 +357,14 @@ func askForConfirmation(message string) bool {
 	fmt.Println("Proposed commit message:")
 	fmt.Println(message)
 	fmt.Print("Accept and commit? (y/n): ")
+
 	var input string
 	var err error
 	input, err = reader.ReadString('\n')
 	if err != nil {
 		return false
 	}
+
 	input = strings.TrimSpace(strings.ToLower(input))
 	return input == "y" || input == "yes"
 }
@@ -277,6 +380,7 @@ func createCommit(message string) error {
 	if err != nil {
 		return fmt.Errorf("commit failed: %s", string(output))
 	}
+
 	fmt.Println("Commit created succesfully")
 	fmt.Println(string(output))
 	return nil
