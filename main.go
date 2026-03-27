@@ -142,7 +142,6 @@ func getTruncatedDiff(maxBytes int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	var diff string = string(output)
 	if len(diff) > maxBytes {
 		diff = diff[:maxBytes] + "\n... (truncated)"
