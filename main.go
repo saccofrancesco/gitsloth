@@ -189,7 +189,7 @@ func buildGitContext() (*GitContext, error) {
 // It runs in a separate goroutine and returns a stop function that
 // blocks until the spinner has fully stopped and the line is cleared.
 func startSpinner(message string) func() {
-	var chars []rune = []rune("⣾⣽⣻⢿⡿⣟⣯⣷")
+	var chars []rune = []rune("⣷⣯⣟⡿⢿⣻⣽⣾")
 	var stop chan struct{} = make(chan struct{})
 	var done chan struct{} = make(chan struct{})
 
