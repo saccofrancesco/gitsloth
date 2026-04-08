@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -347,6 +348,27 @@ Return ONLY the commit message.
 	message = strings.TrimSpace(message)
 
 	return message, nil
+}
+
+func chooseAnOption(options []string) string {
+	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
+	for {
+		fmt.Println("Proposed commit messages:")
+		for i, opt := range options {
+			fmt.Printf("%d) %s\n", i+1, opt)
+		}
+		fmt.Print("> ")
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		choice, err := strconv.Atoi(input)
+		if err != nil || choice < 1 || choice > len(options) {
+			fmt.Println("Invalid input, retry.")
+			continue
+		}
+		selected := options[choice-1]
+		fmt.Println("Selected message:", selected)
+		return selected
+	}
 }
 
 // askForConfirmation displays the proposed commit message and asks the user
