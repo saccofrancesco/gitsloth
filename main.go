@@ -44,9 +44,7 @@ func main() {
 	}
 
 	// Build structured Git context instead of relying on raw diff only.
-	var ctx *GitContext
-	var err error
-	ctx, err = buildGitContext()
+	ctx, err := buildGitContext()
 	if err != nil {
 		fmt.Println("Failed to build git context:", err)
 		os.Exit(1)
@@ -58,8 +56,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	var message string
-	message, err = generateCommitMessage(*ctx)
+	message, err := generateCommitMessage(*ctx)
 	if err != nil {
 		fmt.Println("Failed to generate the commit message", err)
 		os.Exit(1)
@@ -83,15 +80,12 @@ func main() {
 // isGitRepoHere reports whether the current working directory
 // contains a .git folder, indicating it is inside a Git repository.
 func isGitRepoHere() bool {
-	var cwd string
-	var err error
-	cwd, err = os.Getwd()
+	cwd, err := os.Getwd()
 	if err != nil {
 		return false
 	}
-	var gitPath string = filepath.Join(cwd, ".git")
-	var info os.FileInfo
-	info, err = os.Stat(gitPath)
+	gitPath := filepath.Join(cwd, ".git")
+	info, err := os.Stat(gitPath)
 	return err == nil && info != nil
 }
 
@@ -99,10 +93,8 @@ func isGitRepoHere() bool {
 // It returns an error if the Git command fails, including the command output
 // for easier debugging.
 func stageAllChanges() error {
-	var cmd *exec.Cmd = exec.Command("git", "add", "-A")
-	var output []byte
-	var err error
-	output, err = cmd.CombinedOutput()
+	cmd := exec.Command("git", "add", "-A")
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git add failed: %s", string(output))
 	}
@@ -111,10 +103,8 @@ func stageAllChanges() error {
 
 // getBranchName returns the current Git branch name.
 func getBranchName() (string, error) {
-	var cmd *exec.Cmd = exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	var output []byte
-	var err error
-	output, err = cmd.Output()
+	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
@@ -123,10 +113,8 @@ func getBranchName() (string, error) {
 
 // getShortGitStatus returns a compact representation of staged/unstaged changes.
 func getShortGitStatus() (string, error) {
-	var cmd *exec.Cmd = exec.Command("git", "status", "--short")
-	var output []byte
-	var err error
-	output, err = cmd.Output()
+	cmd := exec.Command("git", "status", "--short")
+	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
@@ -136,14 +124,12 @@ func getShortGitStatus() (string, error) {
 // getTruncatedDiff returns the staged Git diff (git diff --cached),
 // truncated to avoid sending excessively large payloads to the API.
 func getTruncatedDiff(maxBytes int) (string, error) {
-	var cmd *exec.Cmd = exec.Command("git", "diff", "--cached")
-	var output []byte
-	var err error
-	output, err = cmd.Output()
+	cmd := exec.Command("git", "diff", "--cached")
+	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
-	var diff string = string(output)
+	diff := string(output)
 	if len(diff) > maxBytes {
 		diff = diff[:maxBytes] + "\n... (truncated)"
 	}
@@ -160,21 +146,17 @@ type GitContext struct {
 
 // buildGitContext gathers all relevant Git information into a single struct.
 func buildGitContext() (*GitContext, error) {
-	var branch string
-	var err error
-	branch, err = getBranchName()
+	branch, err := getBranchName()
 	if err != nil {
 		return nil, err
 	}
 
-	var status string
-	status, err = getShortGitStatus()
+	status, err := getShortGitStatus()
 	if err != nil {
 		return nil, err
 	}
 
-	var diff string
-	diff, err = getTruncatedDiff(8000)
+	diff, err := getTruncatedDiff(8000)
 	if err != nil {
 		return nil, err
 	}
@@ -190,13 +172,13 @@ func buildGitContext() (*GitContext, error) {
 // It runs in a separate goroutine and returns a stop function that
 // blocks until the spinner has fully stopped and the line is cleared.
 func startSpinner(message string) func() {
-	var chars []rune = []rune("⣷⣯⣟⡿⢿⣻⣽⣾")
-	var stop chan struct{} = make(chan struct{})
-	var done chan struct{} = make(chan struct{})
+	chars := []rune("⣷⣯⣟⡿⢿⣻⣽⣾")
+	stop := make(chan struct{})
+	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
-		var i int = 0
+		i := 0
 		for {
 			select {
 			case <-stop:
@@ -218,7 +200,7 @@ func startSpinner(message string) func() {
 
 // ConventionalCommitRules defines the formatting rules used to guide
 // the language model when generating commit messages.
-const ConventionalCommitRules string = `
+const ConventionalCommitRules = `
 1. Use the Conventional Commits format:
 <type>(optional scope): <short summary>
 
@@ -243,15 +225,15 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 //
 // The returned message is cleaned of formatting artifacts (e.g., code fences).
 func generateCommitMessage(ctx GitContext) (string, error) {
-	var apiKey string = os.Getenv("OPENAI_API_KEY")
+	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
 
-	var stop func() = startSpinner(" Generating commit message...")
+	stop := startSpinner(" Generating commit message...")
 
 	// Build a structured prompt using multiple signals instead of raw diff only.
-	var prompt string = fmt.Sprintf(`
+	prompt := fmt.Sprintf(`
 You are an expert software engineer that writes precise commit messages.
 
 Follow the Conventional Commits specification.
@@ -277,7 +259,7 @@ Return ONLY the commit message.
 		ctx.Diff,
 	)
 
-	var body map[string]interface{} = map[string]interface{}{
+	body := map[string]any{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
 			{"role": "system", "content": "You write excellent commit messages."},
@@ -286,16 +268,13 @@ Return ONLY the commit message.
 		"temperature": 0.2,
 	}
 
-	var jsonBody []byte
-	var err error
-	jsonBody, err = json.Marshal(body)
+	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		stop()
 		return "", err
 	}
 
-	var req *http.Request
-	req, err = http.NewRequest(
+	req, err := http.NewRequest(
 		"POST",
 		"https://api.openai.com/v1/chat/completions",
 		bytes.NewBuffer(jsonBody),
@@ -308,9 +287,8 @@ Return ONLY the commit message.
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	var client *http.Client = &http.Client{}
-	var resp *http.Response
-	resp, err = client.Do(req)
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		stop()
 		return "", err
@@ -318,8 +296,7 @@ Return ONLY the commit message.
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		var respBody []byte
-		respBody, _ = io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		stop()
 		return "", fmt.Errorf("API error: %s", string(respBody))
 	}
@@ -343,7 +320,7 @@ Return ONLY the commit message.
 		return "", fmt.Errorf("no response choices returned")
 	}
 
-	var message string = result.Choices[0].Message.Content
+	message := result.Choices[0].Message.Content
 	message = strings.ReplaceAll(message, "```", "")
 	message = strings.TrimSpace(message)
 
@@ -351,7 +328,7 @@ Return ONLY the commit message.
 }
 
 func chooseAnOption(options []string) string {
-	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
+	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Println("Proposed commit messages:")
 		for i, opt := range options {
@@ -374,14 +351,12 @@ func chooseAnOption(options []string) string {
 // askForConfirmation displays the proposed commit message and asks the user
 // for confirmation via standard input. It returns true if the user accepts.
 func askForConfirmation(message string) bool {
-	var reader *bufio.Reader = bufio.NewReader(os.Stdin)
+	reader := bufio.NewReader(os.Stdin)
 	fmt.Println("Proposed commit message:")
 	fmt.Println(message)
 	fmt.Print("Accept and commit? (y/n): ")
 
-	var input string
-	var err error
-	input, err = reader.ReadString('\n')
+	input, err := reader.ReadString('\n')
 	if err != nil {
 		return false
 	}
@@ -394,10 +369,8 @@ func askForConfirmation(message string) bool {
 // It executes `git commit -m <message>` and returns an error if the
 // command fails. On success, it prints the Git output.
 func createCommit(message string) error {
-	var cmd *exec.Cmd = exec.Command("git", "commit", "-m", message)
-	var output []byte
-	var err error
-	output, err = cmd.CombinedOutput()
+	cmd := exec.Command("git", "commit", "-m", message)
+	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("commit failed: %s", string(output))
 	}
