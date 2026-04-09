@@ -3,8 +3,9 @@
 //
 // Usage:
 //
-//  gitsloth                  Generate one commit message on the staged changes
-//  gitsloth [-a | --all]     Stage all the changes before generating the commit
+//		gitsloth                        Generate one commit message on the staged changes
+//		gitsloth [-a | --all]           Stage all the changes before generating the commit
+//	 gitsloth [-c | --clipboard]     Copy the generated message instead of committing
 //
 // It requires:
 //   - Being inside a Git repository
@@ -31,8 +32,11 @@ import (
 // and creates the commit.
 func main() {
 	var all bool
+	var clipboard bool
 	flag.BoolVar(&all, "all", false, "stage all changes before commiting")
 	flag.BoolVar(&all, "a", false, "stage all changes before commiting (shorthand)")
+	flag.BoolVar(&clipboard, "clipboard", false, "copy commit message to clipboard instead of committing")
+	flag.BoolVar(&clipboard, "c", false, "copy commit message to clipboard instead of committing (shorthand)")
 	flag.Parse()
 
 	if !isGitRepoHere() {
@@ -70,7 +74,16 @@ func main() {
 	}
 
 	if !askForConfirmation(message) {
-		fmt.Println("Commit aborted")
+		fmt.Println("Operation aborted")
+		os.Exit(0)
+	}
+
+	if clipboard {
+		if err := copyToClipBoard(message); err != nil {
+			fmt.Println("Failed to copy to clipboard:", err)
+			os.Exit(1)
+		}
+		fmt.Println("Message copied to clipboard")
 		os.Exit(0)
 	}
 
@@ -103,6 +116,44 @@ func stageAllChanges() error {
 		return fmt.Errorf("git add failed: %s", string(output))
 	}
 	return nil
+}
+
+func isCommandAvailable(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+func copyToClipBoard(text string) error {
+	var cmd *exec.Cmd
+	switch {
+	case isCommandAvailable("pbcopy"): // macOS
+		cmd = exec.Command("pbcopy")
+	case isCommandAvailable("xclip"): // Linux (X11)
+		cmd = exec.Command("xclip", "-selection", "clipboard")
+	case isCommandAvailable("wl-copy"): // Linux (Wayland)
+		cmd = exec.Command("wl-copy")
+	case isCommandAvailable("clip"): // Windows
+		cmd = exec.Command("cmd", "/c", "clip")
+	default:
+		return fmt.Errorf("No clipboard utility found (pbcopy, xclip, wl-copy, clip)")
+	}
+
+	in, err := cmd.StdinPipe()
+	if err != nil {
+		return err
+	}
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	_, err = io.WriteString(in, text)
+	if err != nil {
+		return err
+	}
+	in.Close()
+
+	return cmd.Wait()
 }
 
 // getBranchName returns the current Git branch name.
