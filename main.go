@@ -5,7 +5,7 @@
 //
 //		gitsloth                        Generate one commit message on the staged changes
 //		gitsloth [-a | --all]           Stage all the changes before generating the commit
-//	 gitsloth [-c | --clipboard]     Copy the generated message instead of committing
+//	    gitsloth [-c | --clipboard]     Copy the generated message instead of committing
 //
 // It requires:
 //   - Being inside a Git repository
