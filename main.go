@@ -3,8 +3,8 @@
 //
 // Usage:
 //
-//	gitsloth [-a | --all]                      Generate one commit message and confirm
-//	gitsloth list [-n | --num <count>]         Generate N commit messages and pick one
+//  gitsloth                  Generate one commit message on the staged changes
+//  gitsloth [-a | --all]     Stage all the changes before generating the commit
 //
 // It requires:
 //   - Being inside a Git repository
@@ -22,32 +22,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
 
-// main is the entry point of the CLI tool. It dispatches to either the
-// default single-message flow or the list subcommand based on os.Args.
+// main is the entry point of the CLI tool. It validates the environment,
+// generates a commit message from the staged diff, asks for confirmation,
+// and creates the commit.
 func main() {
-	// Detect subcommand before flag parsing so that each subcommand
-	// can own its own FlagSet without polluting the global one.
-	if len(os.Args) > 1 && os.Args[1] == "list" {
-		runList(os.Args[2:])
-		return
-	}
-
-	runDefault(os.Args[1:])
-}
-
-// runDefault is the original single-message flow.
-// Flags: -a / --all  (stage all changes before committing)
-func runDefault(args []string) {
-	fs := flag.NewFlagSet("gitsloth", flag.ExitOnError)
 	var all bool
-	fs.BoolVar(&all, "all", false, "stage all changes before committing")
-	fs.BoolVar(&all, "a", false, "stage all changes before committing (shorthand)")
-	fs.Parse(args) //nolint:errcheck // ExitOnError handles this
+	flag.BoolVar(&all, "all", false, "stage all changes before commiting")
+	flag.BoolVar(&all, "a", false, "stage all changes before commiting (shorthand)")
+	flag.Parse()
 
 	if !isGitRepoHere() {
 		fmt.Println("Not inside a Git repository (.git not found here)")
@@ -61,84 +47,35 @@ func runDefault(args []string) {
 		}
 	}
 
+	// Build structured Git context instead of relying on raw diff only.
 	ctx, err := buildGitContext()
 	if err != nil {
 		fmt.Println("Failed to build git context:", err)
 		os.Exit(1)
 	}
 
+	// Ensure there are actual staged changes before proceeding.
 	if strings.TrimSpace(ctx.Diff) == "" {
 		fmt.Println("No changes to commit")
 		os.Exit(0)
 	}
 
-	messages, err := generateCommitMessages(*ctx, 1)
+	message, err := generateCommitMessage(*ctx)
 	if err != nil {
-		fmt.Println("Failed to generate the commit message:", err)
+		fmt.Println("Failed to generate the commit message", err)
 		os.Exit(1)
-	}
-	if len(messages) == 0 || messages[0] == "" {
+	} else if message == "" {
 		fmt.Println("Commit message is empty")
 		os.Exit(1)
 	}
-
-	message := messages[0]
 
 	if !askForConfirmation(message) {
 		fmt.Println("Commit aborted")
 		os.Exit(0)
 	}
 
-	if err := createCommit(message); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-}
-
-// runList is the list subcommand: it generates N candidate commit messages,
-// lets the user pick one interactively, then creates the commit.
-// Flags: -n / --num  (number of messages to generate, default 5)
-func runList(args []string) {
-	fs := flag.NewFlagSet("gitsloth list", flag.ExitOnError)
-	var num int
-	fs.IntVar(&num, "num", 5, "number of commit messages to generate")
-	fs.IntVar(&num, "n", 5, "number of commit messages to generate (shorthand)")
-	fs.Parse(args) //nolint:errcheck // ExitOnError handles this
-
-	if num < 1 {
-		fmt.Println("--num must be at least 1")
-		os.Exit(1)
-	}
-
-	if !isGitRepoHere() {
-		fmt.Println("Not inside a Git repository (.git not found here)")
-		os.Exit(1)
-	}
-
-	ctx, err := buildGitContext()
+	err = createCommit(message)
 	if err != nil {
-		fmt.Println("Failed to build git context:", err)
-		os.Exit(1)
-	}
-
-	if strings.TrimSpace(ctx.Diff) == "" {
-		fmt.Println("No changes to commit")
-		os.Exit(0)
-	}
-
-	messages, err := generateCommitMessages(*ctx, num)
-	if err != nil {
-		fmt.Println("Failed to generate commit messages:", err)
-		os.Exit(1)
-	}
-	if len(messages) == 0 {
-		fmt.Println("No commit messages were generated")
-		os.Exit(1)
-	}
-
-	chosen := chooseAnOption(messages)
-
-	if err := createCommit(chosen); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -245,7 +182,7 @@ func startSpinner(message string) func() {
 
 	go func() {
 		defer close(done)
-		i := 0
+		var i int = 0
 		for {
 			select {
 			case <-stop:
@@ -281,37 +218,27 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 - Use imperative mood (e.g., "add", "fix", not "added", "fixes")
 `
 
-// generateCommitMessages uses the OpenAI HTTP API to generate one or more
-// Conventional Commit messages based on the provided Git context.
+// generateCommitMessage uses the OpenAI HTTP API to generate a
+// Conventional Commit message based on the provided Git context.
 //
-// When count is 1 the model returns a plain string response.
-// When count > 1 it uses JSON mode, asking the model to return a JSON object
-// {"messages": ["...", "..."]} which is decoded directly — no text parsing needed.
-//
-// It starts a spinner while the request is in progress.
+// It starts a spinner while the request is in progress and ensures
+// the spinner is stopped before returning.
 //
 // Requirements:
 //   - OPENAI_API_KEY environment variable must be set
-func generateCommitMessages(ctx GitContext, count int) ([]string, error) {
+//
+// The returned message is cleaned of formatting artifacts (e.g., code fences).
+func generateCommitMessage(ctx GitContext) (string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		return nil, fmt.Errorf("OPENAI_API_KEY not set")
+		return "", fmt.Errorf("OPENAI_API_KEY not set")
 	}
 
-	spinnerMsg := " Generating commit message..."
-	if count > 1 {
-		spinnerMsg = fmt.Sprintf(" Generating %d commit messages...", count)
-	}
-	stop := startSpinner(spinnerMsg)
+	stop := startSpinner(" Generating commit message...")
 
-	var (
-		systemPrompt string
-		userPrompt   string
-	)
-
-	if count == 1 {
-		systemPrompt = "You write excellent commit messages."
-		userPrompt = fmt.Sprintf(`You are an expert software engineer that writes precise commit messages.
+	// Build a structured prompt using multiple signals instead of raw diff only.
+	prompt := fmt.Sprintf(`
+You are an expert software engineer that writes precise commit messages.
 
 Follow the Conventional Commits specification.
 
@@ -328,71 +255,54 @@ Diff:
 
 Task:
 Generate ONE properly formatted commit message.
-Return ONLY the commit message, with no preamble or explanation.
-`, ConventionalCommitRules, ctx.Branch, ctx.Status, ctx.Diff)
-	} else {
-		// JSON mode: the system prompt must mention JSON so the model honours it.
-		systemPrompt = `You write excellent commit messages. You always respond with valid JSON.`
-		userPrompt = fmt.Sprintf(`You are an expert software engineer that writes precise commit messages.
-
-Follow the Conventional Commits specification.
-
-%s
-
-Branch:
-%s
-
-Git status:
-%s
-
-Diff:
-%s
-
-Task:
-Generate exactly %d distinct, properly formatted commit messages that explore different angles or phrasings of the same change.
-Return a JSON object with a single key "messages" whose value is an array of exactly %d strings.
-Example format: {"messages": ["feat: add foo", "feat(bar): introduce foo support", ...]}
-`, ConventionalCommitRules, ctx.Branch, ctx.Status, ctx.Diff, count, count)
-	}
+Return ONLY the commit message.
+`,
+		ConventionalCommitRules,
+		ctx.Branch,
+		ctx.Status,
+		ctx.Diff,
+	)
 
 	body := map[string]any{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
-			{"role": "system", "content": systemPrompt},
-			{"role": "user", "content": userPrompt},
+			{"role": "system", "content": "You write excellent commit messages."},
+			{"role": "user", "content": prompt},
 		},
-		"temperature": 0.6,
-	}
-	if count > 1 {
-		body["response_format"] = map[string]string{"type": "json_object"}
+		"temperature": 0.2,
 	}
 
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		stop()
-		return nil, err
+		return "", err
 	}
 
-	req, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequest(
+		"POST",
+		"https://api.openai.com/v1/chat/completions",
+		bytes.NewBuffer(jsonBody),
+	)
 	if err != nil {
 		stop()
-		return nil, err
+		return "", err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := (&http.Client{}).Do(req)
+	client := &http.Client{}
+	resp, err := client.Do(req)
 	if err != nil {
 		stop()
-		return nil, err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(resp.Body)
 		stop()
-		return nil, fmt.Errorf("API error: %s", string(body))
+		return "", fmt.Errorf("API error: %s", string(respBody))
 	}
 
 	stop()
@@ -407,56 +317,18 @@ Example format: {"messages": ["feat: add foo", "feat(bar): introduce foo support
 
 	var result chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+		return "", err
 	}
+
 	if len(result.Choices) == 0 {
-		return nil, fmt.Errorf("no response choices returned")
+		return "", fmt.Errorf("no response choices returned")
 	}
 
-	content := strings.TrimSpace(result.Choices[0].Message.Content)
+	message := result.Choices[0].Message.Content
+	message = strings.ReplaceAll(message, "```", "")
+	message = strings.TrimSpace(message)
 
-	// Single-message path: return the raw text as-is.
-	if count == 1 {
-		content = strings.ReplaceAll(content, "```", "")
-		return []string{strings.TrimSpace(content)}, nil
-	}
-
-	// Multi-message path: decode the guaranteed JSON object.
-	var payload struct {
-		Messages []string `json:"messages"`
-	}
-	if err := json.Unmarshal([]byte(content), &payload); err != nil {
-		return nil, fmt.Errorf("failed to decode JSON response: %w\nraw content: %s", err, content)
-	}
-	if len(payload.Messages) == 0 {
-		return nil, fmt.Errorf("model returned an empty messages array")
-	}
-
-	return payload.Messages, nil
-}
-
-// chooseAnOption presents a numbered list of options and prompts the user to
-// pick one by number. It loops until a valid choice is entered and returns
-// the selected string.
-func chooseAnOption(options []string) string {
-	reader := bufio.NewReader(os.Stdin)
-	for {
-		fmt.Println("Proposed commit messages:")
-		for i, opt := range options {
-			fmt.Printf("  %d) %s\n", i+1, opt)
-		}
-		fmt.Print("> ")
-		input, _ := reader.ReadString('\n')
-		input = strings.TrimSpace(input)
-		choice, err := strconv.Atoi(input)
-		if err != nil || choice < 1 || choice > len(options) {
-			fmt.Printf("Invalid input — enter a number between 1 and %d.\n", len(options))
-			continue
-		}
-		selected := options[choice-1]
-		fmt.Println("Selected:", selected)
-		return selected
-	}
+	return message, nil
 }
 
 // askForConfirmation displays the proposed commit message and asks the user
@@ -486,7 +358,7 @@ func createCommit(message string) error {
 		return fmt.Errorf("commit failed: %s", string(output))
 	}
 
-	fmt.Println("Commit created successfully")
+	fmt.Println("Commit created succesfully")
 	fmt.Println(string(output))
 	return nil
 }
