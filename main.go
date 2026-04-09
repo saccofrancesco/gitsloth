@@ -118,11 +118,21 @@ func stageAllChanges() error {
 	return nil
 }
 
+// isCommandAvailable checks whether a given executable is present
+// in the system PATH. It is used to detect which clipboard utility
+// can be invoked on the current machine.
 func isCommandAvailable(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
 
+// copyToClipboard copies the provided text to the system clipboard.
+// It detects the available clipboard utility depending on the OS:
+// - pbcopy (macOS)
+// - xclip or wl-copy (Linux)
+// - clip (Windows)
+// Returns an error if no supported clipboard command is found
+// or if the execution fails.
 func copyToClipBoard(text string) error {
 	var cmd *exec.Cmd
 	switch {
