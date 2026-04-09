@@ -34,9 +34,9 @@ func main() {
 	var all bool
 	var clipboard bool
 	flag.BoolVar(&all, "all", false, "stage all changes before commiting")
-	flag.BoolVar(&all, "a", false, "stage all changes before commiting (shorthand)")
-	flag.BoolVar(&clipboard, "clipboard", false, "copy commit message to clipboard instead of committing")
-	flag.BoolVar(&clipboard, "c", false, "copy commit message to clipboard instead of committing (shorthand)")
+	flag.BoolVar(&all, "a", false, "shorthand for --all")
+	flag.BoolVar(&clipboard, "clipboard", false, "copy selected message to clipboard")
+	flag.BoolVar(&clipboard, "c", false, "shorthand for --clipboard")
 	flag.Parse()
 
 	if !isGitRepoHere() {
