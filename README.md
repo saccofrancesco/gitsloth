@@ -29,7 +29,7 @@ A lightweight CLI tool that generates clean, Conventional Commit messages from y
 
 ## 📌 TL;DR
 
-gitsloth is a minimal Go CLI that reads your staged Git diff, generates a Conventional Commit message using OpenAI, and asks for confirmation before committing.
+gitsloth is a minimal Go CLI that reads your staged Git diff (along with your branch name and status), generates a Conventional Commit message using OpenAI, and asks for confirmation before committing — or copies the message to your clipboard.
 
 ---
 
@@ -49,8 +49,10 @@ It focuses on:
 ## 🔑 Key Features
 
 * **AI-Generated Commit Messages** – Uses OpenAI to turn diffs into clean Conventional Commits
+* **Rich Git Context** – Sends branch name, status, and diff together for more accurate messages
 * **Conventional Commits Ready** – Enforces proper format and style automatically
 * **Interactive Confirmation** – You always approve before committing
+* **Clipboard Support** – Copy the generated message instead of committing directly
 * **Zero Dependencies** – Uses only the Go standard library
 * **Fast CLI Workflow** – Designed to fit seamlessly into your Git routine
 
@@ -73,15 +75,22 @@ export OPENAI_API_KEY=your_api_key_here
 ### Usage
 
 ```bash
-# Stage your changes
+# Stage your changes, then generate a commit message
 git add .
-
-# Generate commit message
 ./gitsloth
 
-# Or let the tool stage everything for you
+# Let the tool stage everything for you
 ./gitsloth -a
+
+# Copy the generated message to clipboard instead of committing
+./gitsloth -c
 ```
+
+| Flag | Shorthand | Description |
+|------|-----------|-------------|
+| `--all` | `-a` | Stage all changes before generating the commit |
+| `--clipboard` | `-c` | Copy the generated message to clipboard instead of committing |
+
 ---
 
 ## 🧪 Example
@@ -90,10 +99,10 @@ git add .
 $ ./gitsloth
 ⣾ Generating commit message...
 ```
+
 ```bash
 Proposed commit message:
-feat: add custom spinner and remove external dependencies
-
+feat: add clipboard support and structured git context
 Accept and commit? (y/n):
 ```
 
@@ -101,8 +110,8 @@ Accept and commit? (y/n):
 
 ## 📬 Emailware: Share Your Thoughts
 
-gitsloth is emailware￼.
-If you find it useful or interesting, I’d like to hear from you.
+gitsloth is [emailware](mailto:francescosacco.github@gmail.com).  
+If you find it useful or interesting, I'd like to hear from you.
 
 📩 francescosacco.github@gmail.com
 
@@ -111,14 +120,16 @@ If you find it useful or interesting, I’d like to hear from you.
 ## 🙏 Support
 
 If you like this project:
+
 * ⭐️ Star the repo
-* ☕️ Buy me a coffee￼
+* ☕️ [Buy me a coffee](https://www.buymeacoffee.com/saccofrancesco)
 * 💌 Send feedback or ideas
 
 ---
 
 📎 You Might Also Like…
-* [DeepShot](https://github.com/saccofrancesco/deepshot): Predict NBA games using machine learning and advanced stats.
+
+* [Deepshot](https://github.com/saccofrancesco/deepshot): Predict NBA games using machine learning and advanced stats.
 * [Supremebot](https://github.com/saccofrancesco/supremebot): A NiceGUI-powered bot for Supreme drops.
 
 ---
@@ -129,4 +140,4 @@ This project is licensed under the [MIT License](https://opensource.org/licenses
 
 ---
 
-> GitHub @saccofrancesco￼
+> GitHub [@saccofrancesco](https://github.com/saccofrancesco)
