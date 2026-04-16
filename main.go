@@ -1,15 +1,21 @@
-// Command gitsloth generates a Conventional Commit message from staged Git changes
-// using the OpenAI API, asks for user confirmation, and creates the commit.
+// Command gitsloth generates one or more Conventional Commit messages
+// from staged Git changes using the OpenAI API, allows the user to select
+// one, optionally asks for confirmation, and creates the commit.
 //
 // Usage:
 //
-//		gitsloth                        Generate one commit message on the staged changes
-//		gitsloth [-a | --all]           Stage all the changes before generating the commit
-//	    gitsloth [-c | --clipboard]     Copy the generated message instead of committing
+//	gitsloth                        Generate one commit message
+//	gitsloth -g 3                  Generate multiple messages and select one
+//	gitsloth [-a | --all]          Stage all changes before generating
+//	gitsloth [-c | --clipboard]    Copy the selected message instead of committing
 //
-// It requires:
-//   - Being inside a Git repository
-//   - OPENAI_API_KEY environment variable set
+// Behavior:
+//   - If -g/--generate > 1, multiple messages are generated and the user selects one
+//   - If -g/--generate = 1, a single message is generated and confirmation is requested
+//
+// Requirements:
+//   - Must be inside a Git repository
+//   - OPENAI_API_KEY environment variable must be set
 package main
 
 import (
@@ -28,13 +34,14 @@ import (
 )
 
 // main is the entry point of the CLI tool. It validates the environment,
-// generates a commit message from the staged diff, asks for confirmation,
-// and creates the commit.
+// optionally stages changes, generates one or more commit messages from
+// the staged diff, lets the user select one, optionally asks for confirmation,
+// and creates or copies the commit message.
 func main() {
 	var all bool
 	var clipboard bool
 	var generate int
-	flag.BoolVar(&all, "all", false, "stage all changes before commiting")
+	flag.BoolVar(&all, "all", false, "stage all changes before committing")
 	flag.BoolVar(&all, "a", false, "shorthand for --all")
 	flag.BoolVar(&clipboard, "clipboard", false, "copy selected message to clipboard")
 	flag.BoolVar(&clipboard, "c", false, "shorthand for --clipboard")
@@ -291,16 +298,25 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 - Use imperative mood (e.g., "add", "fix", not "added", "fixes")
 `
 
-// generateCommitMessage uses the OpenAI HTTP API to generate a
-// Conventional Commit message based on the provided Git context.
+// generateCommitMessages uses the OpenAI HTTP API to generate one or more
+// Conventional Commit messages based on the provided Git context.
 //
-// It starts a spinner while the request is in progress and ensures
-// the spinner is stopped before returning.
+// It starts a spinner while the request is in progress and ensures the spinner
+// is stopped before returning.
+//
+// The model is instructed to return a JSON array of strings, which is parsed
+// into a slice of commit messages.
+//
+// Parameters:
+//   - ctx: structured Git context (branch, status, diff)
+//   - n: number of messages to generate
 //
 // Requirements:
 //   - OPENAI_API_KEY environment variable must be set
 //
-// The returned message is cleaned of formatting artifacts (e.g., code fences).
+// Returns:
+//   - A slice of commit message strings
+//   - An error if generation or parsing fails
 func generateCommitMessages(ctx GitContext, n int) ([]string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -416,6 +432,13 @@ Example:
 	return messages, nil
 }
 
+// selectMessage displays multiple generated commit messages and allows the user
+// to select one by entering its index. If only one message is provided, it is
+// returned immediately.
+//
+// Returns:
+//   - The selected commit message
+//   - A boolean indicating whether a valid selection was made
 func selectMessage(messages []string) (string, bool) {
 	if len(messages) == 1 {
 		return messages[0], true
@@ -440,7 +463,7 @@ func selectMessage(messages []string) (string, bool) {
 	return messages[choice-1], true
 }
 
-// askForConfirmation displays the proposed commit message and asks the user
+// askForConfirmation displays the selected commit message and asks the user
 // for confirmation via standard input. It returns true if the user accepts.
 func askForConfirmation(message string) bool {
 	reader := bufio.NewReader(os.Stdin)
@@ -467,7 +490,7 @@ func createCommit(message string) error {
 		return fmt.Errorf("commit failed: %s", string(output))
 	}
 
-	fmt.Println("Commit created succesfully")
+	fmt.Println("Commit created successfully")
 	fmt.Println(string(output))
 	return nil
 }
