@@ -33,11 +33,19 @@ import (
 func main() {
 	var all bool
 	var clipboard bool
+	var generate int
 	flag.BoolVar(&all, "all", false, "stage all changes before commiting")
 	flag.BoolVar(&all, "a", false, "shorthand for --all")
 	flag.BoolVar(&clipboard, "clipboard", false, "copy selected message to clipboard")
 	flag.BoolVar(&clipboard, "c", false, "shorthand for --clipboard")
+	flag.IntVar(&generate, "generate", 1, "number of commit messages to generate")
+	flag.IntVar(&generate, "g", 1, "shorthand for --generate")
 	flag.Parse()
+
+	if generate < 1 {
+		fmt.Println("generate must be >= 1")
+		os.Exit(1)
+	}
 
 	if !isGitRepoHere() {
 		fmt.Println("Not inside a Git repository (.git not found here)")
@@ -64,13 +72,15 @@ func main() {
 		os.Exit(0)
 	}
 
-	message, err := generateCommitMessage(*ctx)
+	messages, err := generateCommitMessages(*ctx, generate)
 	if err != nil {
-		fmt.Println("Failed to generate the commit message", err)
+		fmt.Println("Failed to generate commit messages", err)
 		os.Exit(1)
-	} else if message == "" {
-		fmt.Println("Commit message is empty")
-		os.Exit(1)
+	}
+	message, ok := selectMessage(messages)
+	if !ok {
+		fmt.Println("Operation aborted")
+		os.Exit(0)
 	}
 
 	if !askForConfirmation(message) {
@@ -289,15 +299,12 @@ feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 //   - OPENAI_API_KEY environment variable must be set
 //
 // The returned message is cleaned of formatting artifacts (e.g., code fences).
-func generateCommitMessage(ctx GitContext) (string, error) {
+func generateCommitMessages(ctx GitContext, n int) ([]string, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
-		return "", fmt.Errorf("OPENAI_API_KEY not set")
+		return nil, fmt.Errorf("OPENAI_API_KEY not set")
 	}
-
-	stop := startSpinner(" Generating commit message...")
-
-	// Build a structured prompt using multiple signals instead of raw diff only.
+	stop := startSpinner(" Generating commit messages...")
 	prompt := fmt.Sprintf(`
 You are an expert software engineer that writes precise commit messages.
 
@@ -315,13 +322,17 @@ Diff:
 %s
 
 Task:
-Generate ONE properly formatted commit message.
-Return ONLY the commit message.
+Generate %d different commit messages.
+
+Return ONLY a valid JSON array of strings.
+Example:
+["feat: add login endpoint", "fix: handle nil pointer"]
 `,
 		ConventionalCommitRules,
 		ctx.Branch,
 		ctx.Status,
 		ctx.Diff,
+		n,
 	)
 
 	body := map[string]any{
@@ -330,13 +341,12 @@ Return ONLY the commit message.
 			{"role": "system", "content": "You write excellent commit messages."},
 			{"role": "user", "content": prompt},
 		},
-		"temperature": 0.2,
+		"temperature": 0.5,
 	}
-
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		stop()
-		return "", err
+		return nil, err
 	}
 
 	req, err := http.NewRequest(
@@ -346,7 +356,7 @@ Return ONLY the commit message.
 	)
 	if err != nil {
 		stop()
-		return "", err
+		return nil, err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+apiKey)
@@ -356,14 +366,13 @@ Return ONLY the commit message.
 	resp, err := client.Do(req)
 	if err != nil {
 		stop()
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
 		stop()
-		return "", fmt.Errorf("API error: %s", string(respBody))
+		return nil, fmt.Errorf("API error: %s", string(respBody))
 	}
 
 	stop()
@@ -375,21 +384,52 @@ Return ONLY the commit message.
 			} `json:"message"`
 		} `json:"choices"`
 	}
-
 	var result chatCompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", err
+		return nil, err
 	}
-
 	if len(result.Choices) == 0 {
-		return "", fmt.Errorf("no response choices returned")
+		return nil, fmt.Errorf("no response choices returned")
 	}
 
-	message := result.Choices[0].Message.Content
-	message = strings.ReplaceAll(message, "```", "")
-	message = strings.TrimSpace(message)
+	content := result.Choices[0].Message.Content
+	content = strings.ReplaceAll(content, "```json", "")
+	content = strings.ReplaceAll(content, "```", "")
+	content = strings.TrimSpace(content)
 
-	return message, nil
+	var messages []string
+	if err := json.Unmarshal([]byte(content), &messages); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %v\nraw: %s", err, content)
+	}
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("no messages generated")
+	}
+
+	return messages, nil
+}
+
+func selectMessage(messages []string) (string, bool) {
+	if len(messages) == 1 {
+		return messages[0], true
+	}
+
+	fmt.Println("Generated commit messages:")
+	for i, msg := range messages {
+		fmt.Printf("%d) %s\n", i+1, msg)
+	}
+	fmt.Print("Select a message (number) or 0 to abort: ")
+
+	reader := bufio.NewReader(os.Stdin)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	var choice int
+	fmt.Sscanf(input, "%d", &choice)
+	if choice <= 0 || choice > len(messages) {
+		return "", false
+	}
+
+	return messages[choice-1], true
 }
 
 // askForConfirmation displays the proposed commit message and asks the user
