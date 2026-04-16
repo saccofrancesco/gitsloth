@@ -306,7 +306,13 @@ func generateCommitMessages(ctx GitContext, n int) ([]string, error) {
 	if apiKey == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY not set")
 	}
-	stop := startSpinner(" Generating commit messages...")
+	var text string
+	if n == 1 {
+		text = " Generating commit message..."
+	} else {
+		text = " Generating commit messages..."
+	}
+	stop := startSpinner(text)
 	prompt := fmt.Sprintf(`
 You are an expert software engineer that writes precise commit messages.
 
