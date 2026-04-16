@@ -29,14 +29,14 @@ A lightweight CLI tool that generates clean, Conventional Commit messages from y
 
 ## 📌 TL;DR
 
-gitsloth is a minimal Go CLI that reads your staged Git diff (along with your branch name and status), generates a Conventional Commit message using OpenAI, and asks for confirmation before committing — or copies the message to your clipboard.
+gitsloth is a minimal Go CLI that reads your staged Git diff (along with your branch name and status), generates one or more Conventional Commit messages using OpenAI, lets you pick the best one, and then commits it — or copies it to your clipboard.
 
 ---
 
 ## 💡 Why gitsloth
 
-- Writing good commit messages is repetitive
-- Conventional Commits are useful but tedious
+- Writing good commit messages is repetitive  
+- Conventional Commits are useful but tedious  
 - This tool automates it **without adding complexity**
 
 It focuses on:
@@ -48,13 +48,15 @@ It focuses on:
 
 ## 🔑 Key Features
 
-* **AI-Generated Commit Messages** – Uses OpenAI to turn diffs into clean Conventional Commits
-* **Rich Git Context** – Sends branch name, status, and diff together for more accurate messages
-* **Conventional Commits Ready** – Enforces proper format and style automatically
-* **Interactive Confirmation** – You always approve before committing
-* **Clipboard Support** – Copy the generated message instead of committing directly
-* **Zero Dependencies** – Uses only the Go standard library
-* **Fast CLI Workflow** – Designed to fit seamlessly into your Git routine
+* **AI-Generated Commit Messages** – Uses OpenAI to turn diffs into clean Conventional Commits  
+* **Multiple Suggestions** – Generate several commit messages and pick the best one  
+* **Rich Git Context** – Sends branch name, status, and diff together for better accuracy  
+* **Conventional Commits Ready** – Enforces proper format and style automatically  
+* **Interactive Selection** – Choose your preferred message when generating multiple options  
+* **Confirmation Flow** – Confirm before committing when generating a single message  
+* **Clipboard Support** – Copy the selected message instead of committing  
+* **Zero Dependencies** – Uses only the Go standard library  
+* **Fast CLI Workflow** – Designed to fit seamlessly into your Git routine  
 
 ---
 
@@ -64,7 +66,7 @@ It focuses on:
 git clone https://github.com/saccofrancesco/gitsloth.git
 cd gitsloth
 go build -o gitsloth
-```
+````
 
 ### Setup
 
@@ -75,25 +77,34 @@ export OPENAI_API_KEY=your_api_key_here
 ### Usage
 
 ```bash
-# Stage your changes, then generate a commit message
-git add .
+# Generate a single commit message (with confirmation)
 ./gitsloth
 
-# Let the tool stage everything for you
+# Generate multiple messages and choose one
+./gitsloth -g 3
+
+# Stage everything before generating
 ./gitsloth -a
 
-# Copy the generated message to clipboard instead of committing
+# Copy selected message to clipboard instead of committing
 ./gitsloth -c
 ```
 
-| Flag | Shorthand | Description |
-|------|-----------|-------------|
-| `--all` | `-a` | Stage all changes before generating the commit |
-| `--clipboard` | `-c` | Copy the generated message to clipboard instead of committing |
+---
+
+## 🧾 Flags
+
+| Flag          | Shorthand | Description                                     |
+| ------------- | --------- | ----------------------------------------------- |
+| `--generate`  | `-g`      | Number of commit messages to generate           |
+| `--all`       | `-a`      | Stage all changes before generating             |
+| `--clipboard` | `-c`      | Copy the selected message instead of committing |
 
 ---
 
-## 🧪 Example
+## 🧪 Examples
+
+### Single message (default)
 
 ```bash
 $ ./gitsloth
@@ -103,17 +114,36 @@ $ ./gitsloth
 ```bash
 Proposed commit message:
 feat: add clipboard support and structured git context
+
 Accept and commit? (y/n):
+```
+
+---
+
+### Multiple messages
+
+```bash
+$ ./gitsloth -g 3
+⣾ Generating commit messages...
+```
+
+```bash
+Generated commit messages:
+1) feat: add clipboard support
+2) feat: implement clipboard integration for commits
+3) refactor: improve commit message generation flow
+
+Select a message (number) or 0 to abort:
 ```
 
 ---
 
 ## 📬 Emailware: Share Your Thoughts
 
-gitsloth is [emailware](mailto:francescosacco.github@gmail.com).  
+gitsloth is [emailware](mailto:francescosacco.github@gmail.com).
 If you find it useful or interesting, I'd like to hear from you.
 
-📩 francescosacco.github@gmail.com
+📩 [francescosacco.github@gmail.com](mailto:francescosacco.github@gmail.com)
 
 ---
 
@@ -122,22 +152,22 @@ If you find it useful or interesting, I'd like to hear from you.
 If you like this project:
 
 * ⭐️ Star the repo
-* ☕️ [Buy me a coffee](https://www.buymeacoffee.com/saccofrancesco)
+* ☕️ Buy me a coffee
 * 💌 Send feedback or ideas
 
 ---
 
 📎 You Might Also Like…
 
-* [Deepshot](https://github.com/saccofrancesco/deepshot): Predict NBA games using machine learning and advanced stats.
-* [Supremebot](https://github.com/saccofrancesco/supremebot): A NiceGUI-powered bot for Supreme drops.
+* Deepshot: Predict NBA games using machine learning and advanced stats
+* Supremebot: A NiceGUI-powered bot for Supreme drops
 
 ---
 
 ## 📜 License
 
-This project is licensed under the [MIT License](https://opensource.org/licenses/MIT) — feel free to use it in your own projects!
+This project is licensed under the MIT License — feel free to use it in your own projects!
 
 ---
 
-> GitHub [@saccofrancesco](https://github.com/saccofrancesco)
+> GitHub @saccofrancesco
