@@ -83,9 +83,11 @@ func main() {
 		os.Exit(0)
 	}
 
-	if !askForConfirmation(message) {
-		fmt.Println("Operation aborted")
-		os.Exit(0)
+	if generate == 1 {
+		if !askForConfirmation(message) {
+			fmt.Println("Operation aborted")
+			os.Exit(0)
+		}
 	}
 
 	if clipboard {
