@@ -1,25 +1,21 @@
-// Command gitsloth generates one or more Conventional Commit messages
-// from staged Git changes using the OpenAI API, allows the user to select
-// one, optionally asks for confirmation, and creates the commit.
+// Command gitsloth generates Conventional Commit messages from staged Git
+// changes using the OpenAI API. It can generate one or more suggestions,
+// allow user selection, optionally confirm, and either create the commit
+// or copy it to the clipboard.
 //
 // Usage:
 //
-//	gitsloth                        Generate one commit message
-//	gitsloth -g 3                  Generate multiple messages and select one
-//	gitsloth [-a | --all]          Stage all changes before generating
-//	gitsloth [-c | --clipboard]    Copy the selected message instead of committing
-//
-// Behavior:
-//   - If -g/--generate > 1, multiple messages are generated and the user selects one
-//   - If -g/--generate = 1, a single message is generated and confirmation is requested
+//	gitsloth                     Generate one message (with confirmation)
+//	gitsloth -g 3               Generate multiple messages and select one
+//	gitsloth [-a | --all]       Stage all changes before generating
+//	gitsloth [-c | --clipboard] Copy message instead of committing
 //
 // Requirements:
-//   - Must be inside a Git repository
+//   - Must be executed inside a Git repository
 //   - OPENAI_API_KEY environment variable must be set
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"flag"
@@ -33,14 +29,11 @@ import (
 	"time"
 )
 
-// main is the entry point of the CLI tool. It validates the environment,
-// optionally stages changes, generates one or more commit messages from
-// the staged diff, lets the user select one, optionally asks for confirmation,
-// and creates or copies the commit message.
 func main() {
 	var all bool
 	var clipboard bool
 	var generate int
+
 	flag.BoolVar(&all, "all", false, "stage all changes before committing")
 	flag.BoolVar(&all, "a", false, "shorthand for --all")
 	flag.BoolVar(&clipboard, "clipboard", false, "copy selected message to clipboard")
@@ -66,14 +59,12 @@ func main() {
 		}
 	}
 
-	// Build structured Git context instead of relying on raw diff only.
 	ctx, err := buildGitContext()
 	if err != nil {
 		fmt.Println("Failed to build git context:", err)
 		os.Exit(1)
 	}
 
-	// Ensure there are actual staged changes before proceeding.
 	if strings.TrimSpace(ctx.Diff) == "" {
 		fmt.Println("No changes to commit")
 		os.Exit(0)
@@ -81,20 +72,19 @@ func main() {
 
 	messages, err := generateCommitMessages(*ctx, generate)
 	if err != nil {
-		fmt.Println("Failed to generate commit messages", err)
+		fmt.Println("Failed to generate commit messages:", err)
 		os.Exit(1)
 	}
+
 	message, ok := selectMessage(messages)
 	if !ok {
 		fmt.Println("Operation aborted")
 		os.Exit(0)
 	}
 
-	if generate == 1 {
-		if !askForConfirmation(message) {
-			fmt.Println("Operation aborted")
-			os.Exit(0)
-		}
+	if generate == 1 && !askForConfirmation(message) {
+		fmt.Println("Operation aborted")
+		os.Exit(0)
 	}
 
 	if clipboard {
@@ -103,68 +93,56 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println("Message copied to clipboard")
-		os.Exit(0)
+		return
 	}
 
-	err = createCommit(message)
-	if err != nil {
+	if err := createCommit(message); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 }
 
-// isGitRepoHere reports whether the current working directory
-// contains a .git folder, indicating it is inside a Git repository.
+// isGitRepoHere checks if the current directory contains a .git folder.
 func isGitRepoHere() bool {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return false
 	}
-	gitPath := filepath.Join(cwd, ".git")
-	info, err := os.Stat(gitPath)
+	info, err := os.Stat(filepath.Join(cwd, ".git"))
 	return err == nil && info != nil
 }
 
-// stageAllChanges stages all changes in the repository by running `git add -A`.
-// It returns an error if the Git command fails, including the command output
-// for easier debugging.
+// stageAllChanges runs `git add -A`.
 func stageAllChanges() error {
 	cmd := exec.Command("git", "add", "-A")
-	output, err := cmd.CombinedOutput()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git add failed: %s", string(output))
+		return fmt.Errorf("git add failed: %s", out)
 	}
 	return nil
 }
 
-// isCommandAvailable checks whether a given executable is present
-// in the system PATH. It is used to detect which clipboard utility
-// can be invoked on the current machine.
+// isCommandAvailable reports whether a command exists in PATH.
 func isCommandAvailable(name string) bool {
 	_, err := exec.LookPath(name)
 	return err == nil
 }
 
-// copyToClipboard copies the provided text to the system clipboard.
-// It detects the available clipboard utility depending on the OS:
-// - pbcopy (macOS)
-// - xclip or wl-copy (Linux)
-// - clip (Windows)
-// Returns an error if no supported clipboard command is found
-// or if the execution fails.
+// copyToClipBoard copies text to the system clipboard using an available tool.
 func copyToClipBoard(text string) error {
 	var cmd *exec.Cmd
+
 	switch {
-	case isCommandAvailable("pbcopy"): // macOS
+	case isCommandAvailable("pbcopy"):
 		cmd = exec.Command("pbcopy")
-	case isCommandAvailable("xclip"): // Linux (X11)
+	case isCommandAvailable("xclip"):
 		cmd = exec.Command("xclip", "-selection", "clipboard")
-	case isCommandAvailable("wl-copy"): // Linux (Wayland)
+	case isCommandAvailable("wl-copy"):
 		cmd = exec.Command("wl-copy")
-	case isCommandAvailable("clip"): // Windows
+	case isCommandAvailable("clip"):
 		cmd = exec.Command("cmd", "/c", "clip")
 	default:
-		return fmt.Errorf("No clipboard utility found (pbcopy, xclip, wl-copy, clip)")
+		return fmt.Errorf("no clipboard utility found")
 	}
 
 	in, err := cmd.StdinPipe()
@@ -176,8 +154,7 @@ func copyToClipBoard(text string) error {
 		return err
 	}
 
-	_, err = io.WriteString(in, text)
-	if err != nil {
+	if _, err := io.WriteString(in, text); err != nil {
 		return err
 	}
 	in.Close()
@@ -185,93 +162,67 @@ func copyToClipBoard(text string) error {
 	return cmd.Wait()
 }
 
-// getBranchName returns the current Git branch name.
 func getBranchName() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(output)), nil
+	out, err := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD").Output()
+	return strings.TrimSpace(string(out)), err
 }
 
-// getShortGitStatus returns a compact representation of staged/unstaged changes.
 func getShortGitStatus() (string, error) {
-	cmd := exec.Command("git", "status", "--short")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(output)), nil
+	out, err := exec.Command("git", "status", "--short").Output()
+	return strings.TrimSpace(string(out)), err
 }
 
-// getTruncatedDiff returns the staged Git diff (git diff --cached),
-// truncated to avoid sending excessively large payloads to the API.
-func getTruncatedDiff(maxBytes int) (string, error) {
-	cmd := exec.Command("git", "diff", "--cached")
-	output, err := cmd.Output()
+func getTruncatedDiff(max int) (string, error) {
+	out, err := exec.Command("git", "diff", "--cached").Output()
 	if err != nil {
 		return "", err
 	}
-	diff := string(output)
-	if len(diff) > maxBytes {
-		diff = diff[:maxBytes] + "\n... (truncated)"
+	diff := string(out)
+	if len(diff) > max {
+		diff = diff[:max] + "\n... (truncated)"
 	}
 	return diff, nil
 }
 
-// GitContext contains structured information about the current Git state.
-// This improves LLM output quality compared to using only raw diffs.
+// GitContext groups repository state used for prompt generation.
 type GitContext struct {
 	Branch string
 	Status string
 	Diff   string
 }
 
-// buildGitContext gathers all relevant Git information into a single struct.
 func buildGitContext() (*GitContext, error) {
 	branch, err := getBranchName()
 	if err != nil {
 		return nil, err
 	}
-
 	status, err := getShortGitStatus()
 	if err != nil {
 		return nil, err
 	}
-
 	diff, err := getTruncatedDiff(8000)
 	if err != nil {
 		return nil, err
 	}
-
-	return &GitContext{
-		Branch: branch,
-		Status: status,
-		Diff:   diff,
-	}, nil
+	return &GitContext{branch, status, diff}, nil
 }
 
-// startSpinner displays a terminal spinner with the provided message.
-// It runs in a separate goroutine and returns a stop function that
-// blocks until the spinner has fully stopped and the line is cleared.
-func startSpinner(message string) func() {
+// startSpinner displays a terminal spinner and returns a stop function.
+func startSpinner(msg string) func() {
 	chars := []rune("⣷⣯⣟⡿⢿⣻⣽⣾")
 	stop := make(chan struct{})
 	done := make(chan struct{})
 
 	go func() {
 		defer close(done)
-		var i int = 0
-		for {
+		for i := 0; ; i++ {
 			select {
 			case <-stop:
 				fmt.Print("\r\033[K")
 				return
 			default:
-				fmt.Printf("\r%c %s", chars[i%len(chars)], message)
+				fmt.Printf("\r%c %s", chars[i%len(chars)], msg)
 				time.Sleep(100 * time.Millisecond)
-				i++
 			}
 		}
 	}()
@@ -282,76 +233,42 @@ func startSpinner(message string) func() {
 	}
 }
 
-// ConventionalCommitRules defines the formatting rules used to guide
-// the language model when generating commit messages.
 const ConventionalCommitRules = `
-1. Use the Conventional Commits format:
-<type>(optional scope): <short summary>
+Use Conventional Commits:
 
-2. Allowed types:
+<type>(optional scope): <summary>
+
+Types:
 feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 
-3. The summary must:
-- Be in lowercase
-- Not end with a period
-- Be concise (max 72 characters)
-- Use imperative mood (e.g., "add", "fix", not "added", "fixes")
+Summary rules:
+- lowercase
+- no trailing period
+- max 72 chars
+- imperative mood
 `
 
-// generateCommitMessages uses the OpenAI HTTP API to generate one or more
-// Conventional Commit messages based on the provided Git context.
-//
-// It starts a spinner while the request is in progress and ensures the spinner
-// is stopped before returning.
-//
-// The model is instructed to return a JSON array of strings, which is parsed
-// into a slice of commit messages.
-//
-// Parameters:
-//   - ctx: structured Git context (branch, status, diff)
-//   - n: number of messages to generate
-//
-// Requirements:
-//   - OPENAI_API_KEY environment variable must be set
-//
-// Returns:
-//   - A slice of commit message strings
-//   - An error if generation or parsing fails
 func generateCommitMessages(ctx GitContext, n int) ([]string, error) {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
+	key := os.Getenv("OPENAI_API_KEY")
+	if key == "" {
 		return nil, fmt.Errorf("OPENAI_API_KEY not set")
 	}
-	var text string
-	if n == 1 {
-		text = " Generating commit message..."
-	} else {
-		text = " Generating commit messages..."
-	}
-	stop := startSpinner(text)
+
+	stop := startSpinner("Generating commit messages...")
+
 	prompt := fmt.Sprintf(`
-You are an expert software engineer that writes precise commit messages.
-
-Follow the Conventional Commits specification.
-
 %s
 
 Branch:
 %s
 
-Git status:
+Status:
 %s
 
 Diff:
 %s
 
-Task:
-Generate %d different commit messages.
-
-Return ONLY a valid JSON array of strings.
-Example:
-["feat: add login endpoint", "fix: handle nil pointer"]
-`,
+Generate %d commit messages as JSON array of strings.`,
 		ConventionalCommitRules,
 		ctx.Branch,
 		ctx.Status,
@@ -359,138 +276,90 @@ Example:
 		n,
 	)
 
-	body := map[string]any{
+	body, _ := json.Marshal(map[string]any{
 		"model": "gpt-4o-mini",
 		"messages": []map[string]string{
-			{"role": "system", "content": "You write excellent commit messages."},
 			{"role": "user", "content": prompt},
 		},
-		"temperature": 0.5,
-	}
-	jsonBody, err := json.Marshal(body)
-	if err != nil {
-		stop()
-		return nil, err
-	}
+	})
 
-	req, err := http.NewRequest(
-		"POST",
+	req, _ := http.NewRequest("POST",
 		"https://api.openai.com/v1/chat/completions",
-		bytes.NewBuffer(jsonBody),
+		bytes.NewBuffer(body),
 	)
-	if err != nil {
-		stop()
-		return nil, err
-	}
 
-	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Authorization", "Bearer "+key)
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		stop()
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		stop()
-		return nil, fmt.Errorf("API error: %s", string(respBody))
-	}
 
 	stop()
 
-	type chatCompletionResponse struct {
+	var parsed struct {
 		Choices []struct {
 			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+				Content string
+			}
+		}
 	}
-	var result chatCompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return nil, err
 	}
-	if len(result.Choices) == 0 {
-		return nil, fmt.Errorf("no response choices returned")
-	}
 
-	content := result.Choices[0].Message.Content
+	content := strings.TrimSpace(parsed.Choices[0].Message.Content)
 	content = strings.ReplaceAll(content, "```json", "")
 	content = strings.ReplaceAll(content, "```", "")
-	content = strings.TrimSpace(content)
 
-	var messages []string
-	if err := json.Unmarshal([]byte(content), &messages); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %v\nraw: %s", err, content)
-	}
-	if len(messages) == 0 {
-		return nil, fmt.Errorf("no messages generated")
+	var msgs []string
+	if err := json.Unmarshal([]byte(content), &msgs); err != nil {
+		return nil, err
 	}
 
-	return messages, nil
+	return msgs, nil
 }
 
-// selectMessage displays multiple generated commit messages and allows the user
-// to select one by entering its index. If only one message is provided, it is
-// returned immediately.
-//
-// Returns:
-//   - The selected commit message
-//   - A boolean indicating whether a valid selection was made
-func selectMessage(messages []string) (string, bool) {
-	if len(messages) == 1 {
-		return messages[0], true
+func selectMessage(msgs []string) (string, bool) {
+	if len(msgs) == 1 {
+		return msgs[0], true
 	}
 
-	fmt.Println("Generated commit messages:")
-	for i, msg := range messages {
-		fmt.Printf("%d) %s\n", i+1, msg)
+	fmt.Println("Generated messages:")
+	for i, m := range msgs {
+		fmt.Printf("%d) %s\n", i+1, m)
 	}
-	fmt.Print("Select a message (number) or 0 to abort: ")
-
-	reader := bufio.NewReader(os.Stdin)
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
+	fmt.Print("Select (0 to abort): ")
 
 	var choice int
-	fmt.Sscanf(input, "%d", &choice)
-	if choice <= 0 || choice > len(messages) {
+	fmt.Scanf("%d", &choice)
+
+	if choice <= 0 || choice > len(msgs) {
 		return "", false
 	}
-
-	return messages[choice-1], true
+	return msgs[choice-1], true
 }
 
-// askForConfirmation displays the selected commit message and asks the user
-// for confirmation via standard input. It returns true if the user accepts.
-func askForConfirmation(message string) bool {
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Proposed commit message:")
-	fmt.Println(message)
-	fmt.Print("Accept and commit? (y/n): ")
+func askForConfirmation(msg string) bool {
+	fmt.Println("Proposed message:\n", msg)
+	fmt.Print("Confirm? (y/n): ")
 
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		return false
-	}
-
-	input = strings.TrimSpace(strings.ToLower(input))
+	var input string
+	fmt.Scanln(&input)
+	input = strings.ToLower(strings.TrimSpace(input))
 	return input == "y" || input == "yes"
 }
 
-// createCommit creates a Git commit using the provided commit message.
-// It executes `git commit -m <message>` and returns an error if the
-// command fails. On success, it prints the Git output.
-func createCommit(message string) error {
-	cmd := exec.Command("git", "commit", "-m", message)
-	output, err := cmd.CombinedOutput()
+func createCommit(msg string) error {
+	cmd := exec.Command("git", "commit", "-m", msg)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("commit failed: %s", string(output))
+		return fmt.Errorf("commit failed: %s", out)
 	}
-
-	fmt.Println("Commit created successfully")
-	fmt.Println(string(output))
+	fmt.Println(string(out))
 	return nil
 }
