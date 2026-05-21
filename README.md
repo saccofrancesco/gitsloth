@@ -88,6 +88,9 @@ export OPENAI_API_KEY=your_api_key_here
 
 # Copy selected message to clipboard instead of committing
 ./gitsloth -c
+
+# Skip confirmation when generating a single message
+./gitsloth -y
 ```
 
 ---
@@ -99,6 +102,7 @@ export OPENAI_API_KEY=your_api_key_here
 | `--generate`  | `-g`      | Number of commit messages to generate           |
 | `--all`       | `-a`      | Stage all changes before generating             |
 | `--clipboard` | `-c`      | Copy the selected message instead of committing |
+| `--yes`       | `-y`      | Skip confirmation prompt for single message     |
 
 ---
 
@@ -116,6 +120,15 @@ Proposed commit message:
 feat: add clipboard support and structured git context
 
 Accept and commit? (y/n):
+```
+
+---
+
+### Single message without confirmation
+
+```bash
+$ ./gitsloth -y
+⣾ Generating commit message...
 ```
 
 ---
