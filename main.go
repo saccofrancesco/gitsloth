@@ -9,6 +9,7 @@
 //	gitsloth -g 3               Generate multiple messages and select one
 //	gitsloth [-a | --all]       Stage all changes before generating
 //	gitsloth [-c | --clipboard] Copy message instead of committing
+//	gitsloth [-y | --yes]       Skip confirmation prompt
 //
 // Requirements:
 //   - Must be executed inside a Git repository
@@ -33,6 +34,7 @@ func main() {
 	var all bool
 	var clipboard bool
 	var generate int
+	var yes bool
 
 	flag.BoolVar(&all, "all", false, "stage all changes before committing")
 	flag.BoolVar(&all, "a", false, "shorthand for --all")
@@ -40,6 +42,8 @@ func main() {
 	flag.BoolVar(&clipboard, "c", false, "shorthand for --clipboard")
 	flag.IntVar(&generate, "generate", 1, "number of commit messages to generate")
 	flag.IntVar(&generate, "g", 1, "shorthand for --generate")
+	flag.BoolVar(&yes, "yes", false, "skip confirmation prompt")
+	flag.BoolVar(&yes, "y", false, "shorthand for --yes")
 	flag.Parse()
 
 	if generate < 1 {
@@ -82,7 +86,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	if generate == 1 && !askForConfirmation(message) {
+	if generate == 1 && !yes && !askForConfirmation(message) {
 		fmt.Println("Operation aborted")
 		os.Exit(0)
 	}
