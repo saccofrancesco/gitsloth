@@ -88,5 +88,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
+          body: |
+            See the assets to download this version and install.
           files: dist/${{ matrix.archive_name }}
           fail_on_unmatched_files: true
