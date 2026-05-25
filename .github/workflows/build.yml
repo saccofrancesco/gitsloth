@@ -1,0 +1,79 @@
+name: Build CLI Binaries
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform_name: linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_name: gitsloth
+            archive_name: gitsloth-linux-x86_64.tar.gz
+          - platform_name: windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_name: gitsloth.exe
+            archive_name: gitsloth-windows-x86_64.zip
+          - platform_name: macos-x86_64
+            os: macos-13
+            target: x86_64-apple-darwin
+            binary_name: gitsloth
+            archive_name: gitsloth-macos-x86_64.tar.gz
+          - platform_name: macos-aarch64
+            os: macos-14
+            target: aarch64-apple-darwin
+            binary_name: gitsloth
+            archive_name: gitsloth-macos-aarch64.tar.gz
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Ensure Rust toolchain is available
+        shell: bash
+        run: |
+          rustup show active-toolchain || rustup toolchain install stable
+          rustup default stable
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Package binary (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.binary_name }}"
+          tar -C dist -czf "dist/${{ matrix.archive_name }}" "${{ matrix.binary_name }}"
+
+      - name: Package binary (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary_name }}" "dist/${{ matrix.binary_name }}"
+          Compress-Archive -Path "dist/${{ matrix.binary_name }}" -DestinationPath "dist/${{ matrix.archive_name }}" -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.archive_name }}
+          path: dist/${{ matrix.archive_name }}
+          if-no-files-found: error
+          retention-days: 14
