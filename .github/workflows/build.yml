@@ -1,12 +1,17 @@
 name: Build CLI Binaries
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
 
 permissions:
   contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -27,12 +32,12 @@ jobs:
             binary_name: gitsloth.exe
             archive_name: gitsloth-windows-x86_64.zip
           - platform_name: macos-x86_64
-            os: macos-14
+            os: macos-latest
             target: x86_64-apple-darwin
             binary_name: gitsloth
             archive_name: gitsloth-macos-x86_64.tar.gz
           - platform_name: macos-aarch64
-            os: macos-14
+            os: macos-latest
             target: aarch64-apple-darwin
             binary_name: gitsloth
             archive_name: gitsloth-macos-aarch64.tar.gz
