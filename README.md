@@ -55,6 +55,30 @@ gitsloth reads your staged Git diff (plus branch name and status), asks OpenAI f
 
 ## Quickstart
 
+### Install prebuilt binary (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/install.sh | sh
+```
+
+Installer behavior:
+- detects macOS/Linux and CPU architecture automatically
+- downloads the matching release asset from GitHub Releases
+- installs to `/usr/local/bin` when writable, otherwise `~/.local/bin`
+- adds the install directory to your shell profile when needed
+
+Optional overrides:
+
+```bash
+# Install a specific tag
+GITSLOTH_VERSION=v1.0.1 curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/install.sh | sh
+
+# Install to a custom directory
+GITSLOTH_INSTALL_DIR="$HOME/bin" curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/install.sh | sh
+```
+
+### Build from source
+
 ```bash
 git clone https://github.com/saccofrancesco/gitsloth.git
 cd gitsloth
