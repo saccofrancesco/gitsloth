@@ -36,12 +36,12 @@ download_file() {
 
   if command -v curl >/dev/null 2>&1; then
     curl -fsSL "$url" -o "$out"
-    return 0
+    return $?
   fi
 
   if command -v wget >/dev/null 2>&1; then
     wget -qO "$out" "$url"
-    return 0
+    return $?
   fi
 
   fail "curl or wget is required"
@@ -184,7 +184,13 @@ main() {
   fi
 
   say "Installing ${BINARY_NAME} (${PLATFORM}) from ${REPO} (${VERSION})"
-  download_file "${download_url}" "${archive_path}" || fail "failed to download ${download_url}"
+  if ! download_file "${download_url}" "${archive_path}"; then
+    fail "failed to download ${download_url}. Ensure the release asset exists for this version."
+  fi
+
+  if [ ! -s "${archive_path}" ]; then
+    fail "downloaded archive is missing or empty: ${archive_path}"
+  fi
 
   tar -xzf "${archive_path}" -C "${TMP_DIR}"
 
