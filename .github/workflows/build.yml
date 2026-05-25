@@ -7,7 +7,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: build-${{ github.ref }}
@@ -82,3 +82,11 @@ jobs:
           path: dist/${{ matrix.archive_name }}
           if-no-files-found: error
           retention-days: 14
+
+      - name: Upload release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: dist/${{ matrix.archive_name }}
+          fail_on_unmatched_files: true
