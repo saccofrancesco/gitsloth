@@ -39,8 +39,6 @@ gitsloth reads your staged Git diff (plus branch name and status), asks OpenAI f
 - Conventional Commits are useful but often tedious
 - This tool automates the process while staying minimal
 
-The Rust version keeps the same CLI behavior and UX as the original Go implementation.
-
 ---
 
 ## Key Features
