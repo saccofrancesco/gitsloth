@@ -16,6 +16,7 @@ A lightweight Rust CLI that generates clean, Conventional Commit messages from y
   <img src="https://img.shields.io/github/contributors/saccofrancesco/gitsloth?style=for-the-badge" alt="Contributors">
   <img src="https://img.shields.io/github/forks/saccofrancesco/gitsloth?style=for-the-badge" alt="Forks">
   <img src="https://img.shields.io/github/stars/saccofrancesco/gitsloth?style=for-the-badge" alt="Stars">
+  <img src="https://img.shields.io/github/v/release/saccofrancesco/gitsloth?style=for-the-badge" alt="Version">
 </p>
 
 <p align="center">
