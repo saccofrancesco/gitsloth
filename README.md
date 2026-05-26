@@ -77,6 +77,19 @@ GITSLOTH_VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/saccofrance
 GITSLOTH_INSTALL_DIR="$HOME/bin" curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/install.sh | sh
 ```
 
+### Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/uninstall.sh | sh
+```
+
+Optional override:
+
+```bash
+# Remove from a custom directory too
+GITSLOTH_INSTALL_DIR="$HOME/bin" curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/uninstall.sh | sh
+```
+
 ### Build from source
 
 ```bash
