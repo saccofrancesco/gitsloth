@@ -114,6 +114,9 @@ export OPENAI_API_KEY=your_api_key_here
 
 # Skip confirmation when generating a single message
 ./target/release/gitsloth -y
+
+# Print installed version
+./target/release/gitsloth -v
 ```
 
 ---
@@ -126,6 +129,7 @@ export OPENAI_API_KEY=your_api_key_here
 | `--all`       | `-a`      | Stage all changes before generating             |
 | `--clipboard` | `-c`      | Copy the selected message instead of committing |
 | `--yes`       | `-y`      | Skip confirmation prompt for single message     |
+| `--version`   | `-v`      | Print gitsloth version                          |
 
 ---
 
