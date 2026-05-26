@@ -86,6 +86,8 @@ Summary rules:
 - max 72 chars
 - imperative mood
 "#;
+const APP_NAME: &str = env!("CARGO_PKG_NAME");
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn main() {
     std::process::exit(run());
@@ -184,6 +186,11 @@ fn parse_flags(args: &[String], program: &str) -> ParseOutcome {
         if arg == "-h" || arg == "--h" || arg == "-help" || arg == "--help" {
             let mut out = io::stdout();
             print_usage(program, &mut out);
+            return ParseOutcome::Exit(0);
+        }
+
+        if arg == "-v" || arg == "--v" || arg == "-version" || arg == "--version" {
+            println!("{APP_NAME} version: {APP_VERSION}");
             return ParseOutcome::Exit(0);
         }
 
@@ -303,6 +310,9 @@ fn print_usage(program: &str, out: &mut dyn Write) {
     let _ = writeln!(out, "  -y\tshorthand for --yes");
     let _ = writeln!(out, "  -yes");
     let _ = writeln!(out, "    \tskip confirmation prompt");
+    let _ = writeln!(out, "  -v\tshorthand for --version");
+    let _ = writeln!(out, "  -version");
+    let _ = writeln!(out, "    \tprint version");
 }
 
 fn is_git_repo_here() -> bool {
