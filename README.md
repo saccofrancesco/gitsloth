@@ -72,7 +72,7 @@ Optional overrides:
 
 ```bash
 # Install a specific tag
-GITSLOTH_VERSION=v1.2.6 curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/install.sh | sh
+GITSLOTH_VERSION=v1.2.7 curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/install.sh | sh
 
 # Install to a custom directory
 GITSLOTH_INSTALL_DIR="$HOME/bin" curl -fsSL https://raw.githubusercontent.com/saccofrancesco/gitsloth/main/install.sh | sh
